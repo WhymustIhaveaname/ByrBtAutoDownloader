@@ -321,8 +321,6 @@ class TorrentBot(ContextDecorator):
         for i in torrent_infos:
             if i['seed_id'] in self.existed_torrent:
                 continue
-            if i['file_size']<1:
-                continue
             if i['seeding']<=0 or i['finished']<=0:
                 continue
 
@@ -343,6 +341,13 @@ class TorrentBot(ContextDecorator):
                 i['value']*=0.8
             elif i['file_size']>20:
                 i['value']*=0.9
+            # 也不想下太小的文件
+            if i['file_size']<0.5:
+                i['value']*=0.5
+            elif i['file_size']<0.8:
+                i['value']*=0.8
+            elif i['file_size']<1.0:
+                i['value']*=0.9
 
             if i['value']>1/30: # 一个月回本
                 ok_infos.append(i)
@@ -353,17 +358,20 @@ class TorrentBot(ContextDecorator):
 
         exist_seeds=transmission_ls()
         torrent_size=sum([i['size'] for i in exist_seeds])
+        remain_size=max_torrent_size/100 # 每次下磁盘空间百分之一的种子，一天执行四次的话，一个月换一次血，真合理
         for ii,i in enumerate(ok_infos):
-            s_temp='%d: %s %sGB value=%.2f(during%.1fdays) %s'%(ii,i['seed_id'],i['file_size'],i['value'],i['live_time'],i['title'])
+            s_temp='%d: %s %.2fGB value=%.2f(during%.1fdays) %s'%(ii,i['seed_id'],i['file_size'],i['value'],i['live_time'],i['title'])
             log('将要下载： %s'%(s_temp))
             if torrent_size+i['file_size']>max_torrent_size:
                 log("磁盘空间不足(%.1fGB)，将执行自动清理"%(torrent_size))
                 if not self.remove(torrent_size+i['file_size']-max_torrent_size,i['value']):
                     log("清理磁盘失败，跳过此种子")
                     continue
-            torrent_size+=i['file_size']
             if self.download_one(i['seed_id']):
-                break # 每次只下一个种子，不要贪心
+                torrent_size+=i['file_size']
+                remain_size-=i['file_size']
+            if remain_size<0:
+                break
 
     def scan_one_page(self,page):
         if page==0:
