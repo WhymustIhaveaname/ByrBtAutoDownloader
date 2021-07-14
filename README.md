@@ -1,6 +1,6 @@
 # brybt_bot
 
-**上一个作者 [lipssmycode](https://github.com/lipssmycode) 不强调这个机器人会删除文件，一上来连警告都没有就把我1个T的文件给删了！！！
+**上一个作者 [lipssmycode/byrbt_bot](https://github.com/lipssmycode/byrbt_bot) 不强调这个机器人会删除文件，一上来连警告都没有就把我1个T的文件给删了！！！
 而且原来仓库代码质量低、README 英文和汉字之间没空格、issue 没人理，我决定放弃原来的仓库，慢慢重写全部代码。**
 
 - [x] 更新 requirements.txt、README
