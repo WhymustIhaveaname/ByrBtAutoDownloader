@@ -57,9 +57,9 @@
 
    [Transmission 搭建笔记](https://github.com/WhymustIhaveaname/Transmission-Block-Xunlei/blob/main/%E6%90%AD%E5%BB%BA%E7%AC%94%E8%AE%B0.md)
 
-* 配置脚本
+* 复制 config-example.py 至 config.py，并更改以下信息。
 
-   复制 config-example.py 至 config.py，并更改以下信息。**注意 download_path 不要填自己正在用的文件夹，里面的文件可能会被删除！**
+    **注意 download_path 不要填自己正在用的文件夹，里面的文件可能会被删除！**
 
     ```python
     username = '用户名'
@@ -86,6 +86,7 @@
     ```
 
     意思是整除 6 的小时的第 25 分钟执行。
+    每次执行大约会换掉 max_torrent_size 1% 的东西，所以建议一天执行四次，这样就是一个月换一遍，完美。
     更多信息见 [使用crontab重复执行脚本](https://github.com/WhymustIhaveaname/TsinghuaTunet#%E4%BD%BF%E7%94%A8crontab%E9%87%8D%E5%A4%8D%E6%89%A7%E8%A1%8C%E8%84%9A%E6%9C%AC)。
 
 ### Acknowledgements

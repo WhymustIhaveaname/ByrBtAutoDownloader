@@ -5,12 +5,9 @@
 # @Software: Sublime Text
 
 import time,os,re,pickle,requests,platform,sys,traceback,math
-from io import BytesIO
 from contextlib import ContextDecorator
-from PIL import Image
 from requests.cookies import RequestsCookieJar
 from bs4 import BeautifulSoup
-from decaptcha import DeCaptcha
 from config import *
 
 # 判断平台
@@ -40,28 +37,11 @@ def log(msg,l=1,end="\n",logfile=LOGFILE):
 
 # 常量
 _BASE_URL = 'https://bt.byr.cn/'
-_cat_map = {
-    '电影': 'movie',
-    '剧集': 'episode',
-    '动漫': 'anime',
-    '音乐': 'music',
-    '综艺': 'show',
-    '游戏': 'game',
-    '软件': 'software',
-    '资料': 'material',
-    '体育': 'sport',
-    '记录': 'documentary',
-}
 
-
-# 全局变量
 if osName == 'Windows':
     download_path = os.path.abspath(windows_download_path)
 elif osName == 'Linux':
     download_path = os.path.abspath(linux_download_path)
-
-decaptcha = DeCaptcha()
-decaptcha.load_model(decaptcha_model)
 
 transmission_cmd='transmission-remote -n %s '%(transmission_user_pw)
 
@@ -69,6 +49,11 @@ def get_url(url):
     return _BASE_URL + url
 
 def login():
+    from decaptcha import DeCaptcha
+    from PIL import Image
+    from io import BytesIO
+    decaptcha = DeCaptcha()
+    decaptcha.load_model(decaptcha_model)
     url = get_url('login.php')
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36'}
 
@@ -217,7 +202,13 @@ def transmission_ls():
             else:
                 torrent['seed_time']=1.0
 
-            torrent['ratio']=float(re.search("Ratio: ([0-9\\.]+)",detailed_info).group(1))
+            torrent['ratio']=re.search("Ratio: ([0-9\\.]+)",detailed_info)
+            if torrent['ratio']:
+                torrent['ratio']=float(torrent['ratio'].group(1))
+            else:
+                assert "Ratio: None" in detailed_info
+                torrent['ratio']=0.0
+
             torrent['size']=_calc_size(re.search("Total size:.+?\\((.+?)wanted\\)",detailed_info).group(1))
             torrent['size']=max(torrent['size'],1.0)
         except Exception:
@@ -248,7 +239,7 @@ class TorrentBot(ContextDecorator):
         for i in transmission_ls():
             if i['id'][-1]=="*": # 未完成的后面有星号
                 continue
-            if i['seed_time']<7: # 两周之内的
+            if i['seed_time']<14: # 两周之内的
                 continue
             i['value']=i['ratio']/i['seed_time']
             exist_seeds.append(i)
@@ -315,7 +306,7 @@ class TorrentBot(ContextDecorator):
             os.remove(torrent_file_path)
             return True # 这个 True 是不要再继续下之后的种子的意思
 
-    def download_many(self,torrent_infos):
+    def download_many(self,torrent_infos,size_ratio=0.01):
         free_wt=1.0 #越大越关注上传比，越小越关注上传量
         ok_infos=[] #将要下载的种子
         for i in torrent_infos:
@@ -338,27 +329,27 @@ class TorrentBot(ContextDecorator):
             if i['file_size']>50:
                 i['value']*=0.5
             elif i['file_size']>30:
-                i['value']*=0.8
+                i['value']*=0.7
             elif i['file_size']>20:
-                i['value']*=0.9
+                i['value']*=0.8
             # 也不想下太小的文件
             if i['file_size']<0.5:
-                i['value']*=0.5
+                i['value']*=0.3
             elif i['file_size']<0.8:
-                i['value']*=0.8
+                i['value']*=0.5
             elif i['file_size']<1.0:
-                i['value']*=0.9
+                i['value']*=0.7
 
             if i['value']>1/30: # 一个月回本
                 ok_infos.append(i)
 
         ok_infos.sort(key=lambda x:x['value'],reverse=True)
         if len(ok_infos)==0:
-            return
+            return 0
 
         exist_seeds=transmission_ls()
         torrent_size=sum([i['size'] for i in exist_seeds])
-        remain_size=max_torrent_size/100 # 每次下磁盘空间百分之一的种子，一天执行四次的话，一个月换一次血，真合理
+        remain_size=max_torrent_size*size_ratio # 每次下磁盘空间百分之一的种子，一天执行四次的话，一个月换一次血，真合理
         for ii,i in enumerate(ok_infos):
             s_temp='%d: %s %.2fGB value=%.2f(during%.1fdays) %s'%(ii,i['seed_id'],i['file_size'],i['value'],i['live_time'],i['title'])
             log('将要下载： %s'%(s_temp))
@@ -372,6 +363,7 @@ class TorrentBot(ContextDecorator):
                 remain_size-=i['file_size']
             if remain_size<0:
                 break
+        return len(ok_infos)
 
     def scan_one_page(self,page):
         if page==0:
@@ -388,14 +380,20 @@ class TorrentBot(ContextDecorator):
             self.refresh()
             return []
 
-    def start(self):
-        log("正在扫描种子")
-        torrent_infos=self.scan_one_page(0)
-        for i in range(1,check_page):
+    def scan_many_pages(self,pstart,pend):
+        log("正在扫描第 %d 至 %d 页"%(pstart,pend))
+        torrent_infos=self.scan_one_page(pstart)
+        for i in range(pstart+1,pend):
             time.sleep(2)
             torrent_infos+=self.scan_one_page(i)
-        log("浏览了 %d 页，获得了 %d 组种子信息"%(check_page,len(torrent_infos)))
-        self.download_many(torrent_infos)
+        log("浏览了 %d 页，获得了 %d 组种子信息"%(pend-pstart,len(torrent_infos)))
+        num_ok=self.download_many(torrent_infos)
+        return num_ok
+
+    def start(self):
+        num_ok=self.scan_many_pages(0,check_page)
+        if num_ok<=check_page: # 如果前几页看得上的种子不多，就往后再翻几页
+            self.scan_many_pages(check_page,3*check_page)
         with open(torrent_id_save_path,'wb') as f:
             self.existed_torrent=pickle.dump(self.existed_torrent[-50:],f)
 
@@ -409,6 +407,8 @@ HELP_TEXT="""
 """
 
 if __name__ == '__main__':
+    #log(TorrentBot().scan_many_pages(70,80))
+    #raise Exception
     if len(sys.argv)<2:
         log(HELP_TEXT,l=0)
         action_str=input("$ ")
