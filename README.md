@@ -57,7 +57,7 @@
 
    [Transmission 搭建笔记](https://github.com/WhymustIhaveaname/Transmission-Block-Xunlei/blob/main/%E6%90%AD%E5%BB%BA%E7%AC%94%E8%AE%B0.md)
 
-* 在 byrbt.py 配置信息
+* 配置脚本
 
    复制 config-example.py 至 config.py，并更改以下信息。**注意 download_path 不要填自己正在用的文件夹，里面的文件可能会被删除！**
 
