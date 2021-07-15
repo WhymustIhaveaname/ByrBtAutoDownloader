@@ -315,16 +315,20 @@ class TorrentBot(ContextDecorator):
             if i['seeding']<=0 or i['finished']<=0:
                 continue
 
-            i['value']=i['finished']/(i['live_time']*i['seeding']) # 平均每天上传率可以增加多少
+            # 计算平均每天上传率可以增加多少
+            i['value']=i['finished']/(i['live_time']*i['seeding'])
             if 'twoup' in i['tag']:
                 i['value']*=2
+            # 给 free 一些 buff
             if 'free' in i['tag']:
                 i['value']*=(1+free_wt)
             elif 'halfdown' in i['tag']:
                 i['value']*=(1+0.5*free_wt)
             elif 'thirtypercentdown' in i['tag']:
                 i['value']*=(1+0.7*free_wt)
-
+            # 根据官方建议，不为已经有很多人做种的种子做种
+            if i['seeding']>6:
+                i['value']*=0.7
             # 我不想下太大的文件
             if i['file_size']>50:
                 i['value']*=0.5
@@ -340,7 +344,8 @@ class TorrentBot(ContextDecorator):
             elif i['file_size']<1.0:
                 i['value']*=0.7
 
-            if i['value']>1/30: # 一个月回本
+            # 如果一个月回本就考虑下
+            if i['value']>1/30:
                 ok_infos.append(i)
 
         ok_infos.sort(key=lambda x:x['value'],reverse=True)
