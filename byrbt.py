@@ -105,14 +105,14 @@ def _calc_size(size):
     if size.endswith("GB"):
         size=float(size[0:-2])
     elif size.endswith("TB"):
-        size=float(size[0:-2])*1024
+        size=float(size[0:-2])*1000.0
     elif size.endswith("MB"):
-        size=float(size[0:-2])/1024
+        size=float(size[0:-2])/1000.0
     elif size.endswith("KB"):
-        size=float(size[0:-2])/1048576
+        size=float(size[0:-2])/100000.0
     else:
         log("size format error: %s"%(size),l=2)
-        size=0.0
+        size=1.0
     return size
 
 def parse_torrent_info(table):
@@ -138,14 +138,6 @@ def parse_torrent_info(table):
 
         href = main_td.select('a')[0].attrs['href']
         torrent_info['seed_id'] = re.findall(r'id=(\d+)&', href)[0]
-
-        temp = set([font.attrs['class'][0] for font in main_td.select('b > font') if 'class' in font.attrs.keys()])
-        if 'hot' in temp:
-            torrent_info['is_hot'] = True
-        if 'new' in temp:
-            torrent_info['is_new'] = True
-        if 'recommended' in temp:
-            torrent_info['is_recommended'] = True
 
         if 'class' in tds[1].select('table > tr')[0].attrs.keys():
             torrent_info['tag'] = _get_tag(tds[1].select('table > tr')[0].attrs['class'][0])
@@ -205,17 +197,17 @@ def transmission_ls():
                 torrent['ratio']=0.0
 
             torrent['size']=_calc_size(re.search("Total size:.+?\\((.+?)wanted\\)",detailed_info).group(1))
-            torrent['size']=max(torrent['size'],1.0)
         except Exception:
-            log("parse transmission_ls failed:\n%s"%(detailed_info),l=3)
+            log("parse transmission's ls failed:\n%s"%(detailed_info),l=3)
             continue
         text_s.append(torrent)
     return text_s
 
-class TorrentBot(ContextDecorator):
+class AutoDown(ContextDecorator):
     def __init__(self):
-        super(TorrentBot, self).__init__()
+        super(AutoDown,self).__init__()
         self.headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36'}
+        self.rmable_seeds=None
         if os.path.exists(torrent_id_save_path):
             with open(torrent_id_save_path,'rb') as f:
                 self.existed_torrent=pickle.load(f)
@@ -229,30 +221,29 @@ class TorrentBot(ContextDecorator):
         for k, v in byrbt_cookies.items():
             self.cookie_jar[k] = v
 
-    def remove(self,target_size,neo_value):
-        exist_seeds=[]
-        for i in transmission_ls():
+    def remove_init(self,tls):
+        self.rmable_seeds=[]
+        for i in tls:
             if i['id'][-1]=="*": # 忽略未完成的 (后面有星号)
                 continue
-            if i['seed_time']<14: # 忽略两周之内的
+            if i['seed_time']<RM_PEOTECT_TIME:
                 continue
             i['value']=i['ratio']/i['seed_time']
-            exist_seeds.append(i)
-        if len(exist_seeds)==0:
-            return False
-        exist_seeds.sort(key=lambda x: x['seed_time'],reverse=True)
-        exist_seeds.sort(key=lambda x: x['value'])
-        value_avg=[i['value'] for i in exist_seeds]
-        value_avg=sum(value_avg)/len(value_avg)
-        log("average seed value: %.2f"%(value_avg))
+            self.rmable_seeds.append(i)
+        self.rmable_seeds.sort(key=lambda x: x['seed_time'],reverse=True)
+        self.rmable_seeds.sort(key=lambda x: x['value'])
+        if len(self.rmable_seeds)>0:
+            self.rmable_avg_val=[i['value'] for i in self.rmable_seeds]
+            self.rmable_avg_val=sum(self.rmable_avg_val)/len(self.rmable_avg_val)
+            log("average seed value: %.2f"%(self.rmable_avg_val))
 
+    def remove(self,target_size,neo_value):
         del_size=0
-        while len(exist_seeds)>0 and del_size<target_size:
-            rm_info = exist_seeds.pop(0)
-            ucb=math.sqrt(math.log(rm_info['seed_time'])/rm_info['seed_time'])
-            if neo_value+value_avg*ucb<rm_info['value']:
+        for rm_info in self.rmable_seeds:
+            ucb=UNFAITHFULNESS*math.sqrt(math.log(rm_info['seed_time'])/rm_info['seed_time'])
+            if neo_value+self.rmable_avg_val*ucb<rm_info['value']:
                 continue
-            log("正在删除 %s"%(remove_info['name']))
+            log("正在删除 %s"%(rm_info['name']))
             res = execCmd(transmission_cmd+'-t %s --remove-and-delete'%(rm_info['id'],))
             if "success" not in res:
                 log('删除失败 %s'%(rm_info))
@@ -261,8 +252,8 @@ class TorrentBot(ContextDecorator):
                 log('删除成功，但文件似乎还在 %s'%(rm_info['name']),l=2)
                 continue
             del_size+=rm_info['size']
-        if del_size>target_size:
-            return True
+            if del_size>target_size:
+                return True
         else:
             return False
 
@@ -301,8 +292,18 @@ class TorrentBot(ContextDecorator):
             os.remove(torrent_file_path)
             return True # 这个 True 是不要再继续下之后的种子的意思
 
+    def piecewise_linear(pts,x):
+        if len(pts)<2:
+            return 1.0
+        if x>pts[0][0]>pts[1][0] or x<pts[0][0]<pts[1][0]:
+            return pts[0][1]
+        for i in range(len(pts)-1):
+            if pts[i][0]>=x>pts[i+1][0] or pts[i][0]<=x<pts[i+1][0]:
+                return ((pts[i][0]-x)*pts[i+1][1]+(x-pts[i+1][0])*pts[i][1])/(pts[i][0]-pts[i+1][0])
+        else:
+            return 1.0
+
     def download_many(self,torrent_infos,size_ratio=0.01):
-        free_wt=1.0 #越大越关注上传比，越小越关注上传量
         ok_infos=[] #将要下载的种子
         for i in torrent_infos:
             if i['seed_id'] in self.existed_torrent:
@@ -315,30 +316,19 @@ class TorrentBot(ContextDecorator):
             i['value']=(i['finished']+i['downloading'])/((i['live_time']+1.0)*(i['seeding']+1))
             if 'twoup' in i['tag']:
                 i['value']*=2
-            # 给 free 一些 buff
+            # free tag's buff, FREE_WT defaults to 1.0
             if 'free' in i['tag']:
-                i['value']*=(1+free_wt)
+                i['value']*=(1+FREE_WT)
             elif 'halfdown' in i['tag']:
-                i['value']*=(1+0.5*free_wt)
+                i['value']*=(1+0.5*FREE_WT)
             elif 'thirtypercentdown' in i['tag']:
-                i['value']*=(1+0.7*free_wt)
-            # 根据官方建议，不为已经有很多人做种的种子做种
-            if i['seeding']>6:
-                i['value']*=(1+math.sqrt(2)*math.pow(10.0,-i['seeding']/6))/\
-                            (1+math.sqrt(2)*math.pow(10.0,-1/6))
-            # 我不想下太大的文件
-            # 整个线性衰减，20G 时 0.8，80G 时 0.2
-            if i['file_size']>80:
-                i['value']*=0.2
-            elif i['file_size']>20:
-                i['value']*=(1-i['file_size']/100)
-            # 也不想下太小的文件
-            # 也整个线性衰减，1.0G 时 0.5，0.0G 时 0.0
-            if i['file_size']<1.0:
-                i['value']*=(i['file_size']/2)
+                i['value']*=(1+0.7*FREE_WT)
 
-            # 如果一周回本就考虑下，因为remove里是两周内的种子不删
-            if i['value']>1/7:
+            i['value']*=AutoDown.piecewise_linear(SEED_NUM_DEBUFF,i['seeding'])
+            i['value']*=AutoDown.piecewise_linear(LARGE_FILE_DEBUFF,i['file_size'])
+            i['value']*=AutoDown.piecewise_linear(SMALL_FILE_DEBUFF,i['file_size'])
+
+            if i['value']>1/COST_RECOVERY_TIME:
                 ok_infos.append(i)
 
         if len(ok_infos)==0:
@@ -348,13 +338,19 @@ class TorrentBot(ContextDecorator):
         exist_seeds=transmission_ls()
         torrent_size=sum([i['size'] for i in exist_seeds])
         remain_size=max_torrent_size*size_ratio # 每次下磁盘空间百分之一的种子，一天执行四次的话，一个月换一次血，真合理
+        rmable_size=max_torrent_size #可能被清理空间的上限
         for ii,i in enumerate(ok_infos):
-            s_temp='%d: %s %.2fGB value is %.2f during %.1f day(s) %s'%(ii,i['seed_id'],i['file_size'],i['value'],i['live_time'],i['title'])
-            log('将要下载： %s'%(s_temp))
+            if i['file_size']>rmable_size:
+                continue
+            s_temp='#%d: %s %.2fGB value is %.2f during %.1f day(s) %s'%(ii,i['seed_id'],i['file_size'],i['value'],i['live_time'],i['title'])
+            log('将要下载 %s'%(s_temp))
             if torrent_size+i['file_size']>max_torrent_size:
-                log("磁盘空间不足(%.1fGB)，将执行自动清理"%(torrent_size))
+                if self.rmable_seeds==None:
+                    log("磁盘空间不足(%.1fGB)，将执行自动清理"%(torrent_size))
+                    self.remove_init(exist_seeds)
                 if not self.remove(torrent_size+i['file_size']-max_torrent_size,i['value']):
                     log("清理磁盘失败，跳过此种子")
+                    rmable_size=min(rmable_size,i['file_size'])
                     continue
             if self.download_one(i['seed_id']):
                 torrent_size+=i['file_size']
@@ -389,9 +385,9 @@ class TorrentBot(ContextDecorator):
         return num_ok
 
     def start(self):
-        num_ok=self.scan_many_pages(0,check_page)
-        if num_ok<=check_page: # 如果前几页看得上的种子不多，就往后再翻几页
-            self.scan_many_pages(check_page,3*check_page)
+        num_ok=self.scan_many_pages(0,CHECK_PAGE_NUM)
+        if num_ok<=CHECK_PAGE_NUM: # 如果前几页看得上的种子不多，就往后再翻几页
+            self.scan_many_pages(CHECK_PAGE_NUM,3*CHECK_PAGE_NUM)
         with open(torrent_id_save_path,'wb') as f:
             # 根据经验，1T留150个就行
             num_left=int(max_torrent_size*0.15)
@@ -408,8 +404,6 @@ HELP_TEXT="""
 """
 
 if __name__ == '__main__':
-    #log(TorrentBot().scan_many_pages(70,80))
-    #raise Exception
     if len(sys.argv)<2:
         log(HELP_TEXT,l=0)
         action_str=input("$ ")
@@ -419,16 +413,19 @@ if __name__ == '__main__':
     if action_str.endswith('help'):
         log(HELP_TEXT)
     elif action_str.endswith('main'):
-        byrbt_bot=TorrentBot()
-        byrbt_bot.start()
+        try:
+            byrbt_bot=AutoDown()
+            byrbt_bot.start()
+        except Exception:
+            log("",l=3)
     elif action_str.endswith('remove'):
-        byrbt_bot=TorrentBot()
+        byrbt_bot=AutoDown()
         byrbt_bot.remove(max_torrent_size*0.2,-1.0)
     elif action_str.endswith('ls'):
         exist_seeds=transmission_ls()
         torrent_size=sum([i['size'] for i in exist_seeds])
-        log("There are now %d seeds with total size %.1f GB (after fully downloaded)."%(len(exist_seeds),torrent_size))
-        #exist_seeds=[i for i in exist_seeds if i['done']=="100%"]
+        log("There are now %d seeds with total size %.2f GB (after fully downloaded)."%(len(exist_seeds),torrent_size))
+        exist_seeds.sort(key=lambda x:x['seed_time'],reverse=False)
         exist_seeds.sort(key=lambda x:x['ratio']/x['seed_time'],reverse=True)
         pretty_text=["\t  id value   ratio stime size(GB) name",]
         pretty_text+=["\t%4d %5.2f/d %5.1f %5.1f %6.1f   %s"%(int(i['id']),i['ratio']/i['seed_time'],i['ratio'],i['seed_time'],i['size'],i['name']) for i in exist_seeds]

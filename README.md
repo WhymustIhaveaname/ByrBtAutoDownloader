@@ -67,7 +67,6 @@
     transmission_user_pw = 'user:passwd'  # transmission 的用户名和密码，按照格式填入
     linux_download_path = '<path_to_download_dir>'  # 下载路径
     max_torrent_size = 512  # 最大文件大小，GB
-    check_page = 5   # 检查种子页前多少页
     ```
 
 * 启动！
