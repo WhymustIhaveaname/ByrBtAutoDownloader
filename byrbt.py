@@ -233,8 +233,8 @@ class AutoDown(ContextDecorator):
         self.rmable_seeds.sort(key=lambda x: x['seed_time'],reverse=True)
         self.rmable_seeds.sort(key=lambda x: x['value'])
         if len(self.rmable_seeds)>0:
-            self.rmable_avg_val=[i['value'] for i in self.rmable_seeds]
-            self.rmable_avg_val=sum(self.rmable_avg_val)/len(self.rmable_avg_val)
+            self.rmable_avg_val=sum([i['value']*i['size'] for i in self.rmable_seeds])/\
+                                sum([i['size'] for i in self.rmable_seeds])
             log("average seed value: %.2f"%(self.rmable_avg_val))
 
     def remove(self,target_size,neo_value):
@@ -393,7 +393,6 @@ class AutoDown(ContextDecorator):
             num_left=int(max_torrent_size*0.15)
             self.existed_torrent=pickle.dump(self.existed_torrent[-num_left:],f)
 
-
 HELP_TEXT="""
     ByrBt Auto-Downloader:
         挑选北邮人上最受欢迎、最被需要的种子做种
@@ -425,8 +424,11 @@ if __name__ == '__main__':
         exist_seeds=transmission_ls()
         torrent_size=sum([i['size'] for i in exist_seeds])
         log("There are now %d seeds with total size %.2f GB (after fully downloaded)."%(len(exist_seeds),torrent_size))
+        for i in exist_seeds:
+            i['value']=i['ratio']/i['seed_time']
+        log("Average value: %.2f"%(sum([i['value']*i['size'] for i in exist_seeds])/torrent_size))
         exist_seeds.sort(key=lambda x:x['seed_time'],reverse=False)
-        exist_seeds.sort(key=lambda x:x['ratio']/x['seed_time'],reverse=True)
+        exist_seeds.sort(key=lambda x:x['value'],reverse=True)
         pretty_text=["\t  id value   ratio stime size(GB) name",]
         pretty_text+=["\t%4d %5.2f/d %5.1f %5.1f %6.1f   %s"%(int(i['id']),i['ratio']/i['seed_time'],i['ratio'],i['seed_time'],i['size'],i['name']) for i in exist_seeds]
         pretty_text="\n".join(pretty_text)
