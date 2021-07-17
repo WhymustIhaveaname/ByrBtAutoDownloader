@@ -17,3 +17,4 @@ requests
 Cython
 scikit-learn
 scipy
+tqdm

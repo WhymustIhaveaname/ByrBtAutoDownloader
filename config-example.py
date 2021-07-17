@@ -19,6 +19,8 @@ LARGE_FILE_DEBUFF = ((60,0.1),(15,1.0))         # 大文件的 debuff，由点�
 SMALL_FILE_DEBUFF = (( 0,0.0),( 2,1.0))         # 小文件的 debuff
 SEED_NUM_DEBUFF = ((12,0.5),(6,0.6),(5,1.0))    # 有很多人做种时的 debuff
 
+SEED_ID_KEEP_NUM = max_torrent_size//5          # 不检查最近的这么多种子，大约1T200个即可
+
 # 程序临时文件存储路径
 decaptcha_model = 'captcha_classifier.pkl'  # 验证码识别模型
 cookies_save_path = 'ByrbtCookies.pickle'  # cookies保存路径

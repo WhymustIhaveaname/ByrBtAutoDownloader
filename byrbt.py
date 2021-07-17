@@ -8,6 +8,7 @@ import time,os,re,pickle,requests,platform,sys,traceback,math
 from contextlib import ContextDecorator
 from requests.cookies import RequestsCookieJar
 from bs4 import BeautifulSoup
+from tqdm import tqdm
 from config import *
 
 # 判断平台
@@ -168,7 +169,8 @@ def transmission_ls():
     """text_s is list of {'id': '153', 'done': '0%', 'size': '1GB', 'name': 'dadada'}"""
     text=execCmd(transmission_cmd+'-l')
     text_s=[]
-    for t in text.split('\n')[1:-2]: #去掉第一和最后两个
+    log("Collecting detail infos for existed seeds...",l=0)
+    for t in tqdm(text.split('\n')[1:-2],ncols=75,bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}'): #去掉第一和最后两个
         ts = t.split()
         torrent = {'id':ts[0],'done':ts[1],'name':ts[-1]}
 
@@ -230,12 +232,12 @@ class AutoDown(ContextDecorator):
                 continue
             i['value']=i['ratio']/i['seed_time']
             self.rmable_seeds.append(i)
-        self.rmable_seeds.sort(key=lambda x: x['seed_time'],reverse=True)
-        self.rmable_seeds.sort(key=lambda x: x['value'])
         if len(self.rmable_seeds)>0:
             self.rmable_avg_val=sum([i['value']*i['size'] for i in self.rmable_seeds])/\
                                 sum([i['size'] for i in self.rmable_seeds])
             log("average seed value: %.2f"%(self.rmable_avg_val))
+            self.rmable_seeds.sort(key=lambda x: x['seed_time'],reverse=True)
+            self.rmable_seeds.sort(key=lambda x: x['value'])
 
     def remove(self,target_size,neo_value):
         del_size=0
@@ -313,7 +315,7 @@ class AutoDown(ContextDecorator):
 
             # 计算平均每天上传率可以增加多少
             # live time add 1 to avoid sigularity and to preference old seeds
-            i['value']=(i['finished']+i['downloading'])/((i['live_time']+1.0)*(i['seeding']+1))
+            i['value']=(i['finished']+i['downloading'])/((i['live_time']+1.0)*(i['seeding']+2))
             if 'twoup' in i['tag']:
                 i['value']*=2
             # free tag's buff, FREE_WT defaults to 1.0
@@ -389,9 +391,7 @@ class AutoDown(ContextDecorator):
         if num_ok<=CHECK_PAGE_NUM: # 如果前几页看得上的种子不多，就往后再翻几页
             self.scan_many_pages(CHECK_PAGE_NUM,3*CHECK_PAGE_NUM)
         with open(torrent_id_save_path,'wb') as f:
-            # 根据经验，1T留150个就行
-            num_left=int(max_torrent_size*0.15)
-            self.existed_torrent=pickle.dump(self.existed_torrent[-num_left:],f)
+            self.existed_torrent=pickle.dump(self.existed_torrent[-SEED_ID_KEEP_NUM:],f)
 
 HELP_TEXT="""
     ByrBt Auto-Downloader:
@@ -423,7 +423,7 @@ if __name__ == '__main__':
     elif action_str.endswith('ls'):
         exist_seeds=transmission_ls()
         torrent_size=sum([i['size'] for i in exist_seeds])
-        log("There are now %d seeds with total size %.2f GB (after fully downloaded)."%(len(exist_seeds),torrent_size))
+        log("There are now %d seeds with total size %.1f GB (after fully downloaded)."%(len(exist_seeds),torrent_size))
         for i in exist_seeds:
             i['value']=i['ratio']/i['seed_time']
         log("Average value: %.2f"%(sum([i['value']*i['size'] for i in exist_seeds])/torrent_size))
