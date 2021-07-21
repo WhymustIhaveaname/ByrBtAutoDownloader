@@ -403,6 +403,21 @@ class AutoDown(ContextDecorator):
         with open(torrent_id_save_path,'wb') as f:
             self.existed_torrent=pickle.dump(self.existed_torrent[-SEED_ID_KEEP_NUM:],f)
 
+    def ls():
+        exist_seeds=transmission_ls()
+        torrent_size=sum([i['size'] for i in exist_seeds])
+        log("There are now %d seeds with total size %.1f GB (after fully downloaded)."%(len(exist_seeds),torrent_size))
+        for i in exist_seeds:
+            i['value']=i['ratio']/i['seed_time']
+        log("Average value: %.2f"%(sum([i['value']*i['size'] for i in exist_seeds])/torrent_size))
+        exist_seeds.sort(key=lambda x:x['seed_time'],reverse=False)
+        exist_seeds.sort(key=lambda x:x['value'],reverse=True)
+        pretty_text=["\t  id value   ratio stime size(GB) name",]
+        pretty_text+=["\t%4d %5.2f/d %5.1f %5.1f %6.1f   %s"\
+                        %(int(i['id']),i['ratio']/i['seed_time'],i['ratio'],i['seed_time'],i['size'],i['name']) for i in exist_seeds]
+        pretty_text="\n".join(pretty_text)
+        log("Sorted by value:\n%s"%(pretty_text),l=0)
+
 HELP_TEXT="""
     ByrBt Auto-Downloader:
         挑选北邮人上最受欢迎、最被需要的种子做种
@@ -413,7 +428,7 @@ HELP_TEXT="""
 
 if __name__ == '__main__':
     if len(sys.argv)<2:
-        log(HELP_TEXT,l=0)
+        log(HELP_TEXT)
         action_str=input("$ ")
     else:
         action_str=sys.argv[1]
@@ -426,22 +441,8 @@ if __name__ == '__main__':
             byrbt_bot.start()
         except Exception:
             log("",l=3)
-    elif action_str.endswith('remove'):
-        byrbt_bot=AutoDown()
-        byrbt_bot.remove(max_torrent_size*0.2,-1.0)
     elif action_str.endswith('ls'):
-        exist_seeds=transmission_ls()
-        torrent_size=sum([i['size'] for i in exist_seeds])
-        log("There are now %d seeds with total size %.1f GB (after fully downloaded)."%(len(exist_seeds),torrent_size))
-        for i in exist_seeds:
-            i['value']=i['ratio']/i['seed_time']
-        log("Average value: %.2f"%(sum([i['value']*i['size'] for i in exist_seeds])/torrent_size))
-        exist_seeds.sort(key=lambda x:x['seed_time'],reverse=False)
-        exist_seeds.sort(key=lambda x:x['value'],reverse=True)
-        pretty_text=["\t  id value   ratio stime size(GB) name",]
-        pretty_text+=["\t%4d %5.2f/d %5.1f %5.1f %6.1f   %s"%(int(i['id']),i['ratio']/i['seed_time'],i['ratio'],i['seed_time'],i['size'],i['name']) for i in exist_seeds]
-        pretty_text="\n".join(pretty_text)
-        log("Sorted by value:\n%s"%(pretty_text),l=0)
+        AutoDown.ls()
     else:
         log('invalid argument')
         log(HELP_TEXT,l=0)
