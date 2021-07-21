@@ -231,6 +231,7 @@ class AutoDown(ContextDecorator):
             if i['seed_time']<RM_PEOTECT_TIME:
                 continue
             i['value']=i['ratio']/i['seed_time']
+            i['deleted']=False
             self.rmable_seeds.append(i)
         if len(self.rmable_seeds)>0:
             self.rmable_avg_val=sum([i['value']*i['size'] for i in self.rmable_seeds])/\
@@ -242,22 +243,28 @@ class AutoDown(ContextDecorator):
     def remove(self,target_size,neo_value):
         del_size=0
         for rm_info in self.rmable_seeds:
+            if rm_info['deleted']:
+                continue
             ucb=UNFAITHFULNESS*math.sqrt(math.log(rm_info['seed_time'])/rm_info['seed_time'])
             if neo_value+self.rmable_avg_val*ucb<rm_info['value']:
                 continue
-            log("正在删除 %s"%(rm_info['name']))
-            res = execCmd(transmission_cmd+'-t %s --remove-and-delete'%(rm_info['id'],))
+
+            #log("%.2f+%.2f>%.2f"%(neo_value,self.rmable_avg_val*ucb,rm_info['value']))
+            log("正在删除 %s"%(rm_info,))
+            res=execCmd(transmission_cmd+'-t %s --remove-and-delete'%(rm_info['id'],))
             if "success" not in res:
-                log('删除失败 %s'%(rm_info))
+                log('删除失败：%s'%(res),l=2)
                 continue
-            if os.path.exists(os.path.join(download_path, rm_info['name'])):
-                log('删除成功，但文件似乎还在 %s'%(rm_info['name']),l=2)
+            if os.path.exists(os.path.join(download_path,rm_info['name'])):
+                log('删除失败，但文件还在：%s'%(res),l=2)
                 continue
+
             del_size+=rm_info['size']
+            rm_info['deleted']=True
+            log("removed %.2f of %.2f"%(del_size,target_size))
             if del_size>target_size:
-                return True
-        else:
-            return False
+                break
+        return del_size
 
     def download_one(self, torrent_id):
         download_url = get_url('download.php?id=%s'%(torrent_id))
@@ -350,7 +357,10 @@ class AutoDown(ContextDecorator):
                 if self.rmable_seeds==None:
                     log("磁盘空间不足(%.1fGB)，将执行自动清理"%(torrent_size))
                     self.remove_init(exist_seeds)
-                if not self.remove(torrent_size+i['file_size']-max_torrent_size,i['value']):
+                target_size=torrent_size+i['file_size']-max_torrent_size
+                removed_size=self.remove(target_size,i['value'])
+                torrent_size-=removed_size
+                if removed_size<target_size:
                     log("清理磁盘失败，跳过此种子")
                     rmable_size=min(rmable_size,i['file_size'])
                     continue
@@ -399,8 +409,7 @@ HELP_TEXT="""
     usage:
         --main    run main program
         --help    print this message
-        --ls      list details of seeds managed by this programme
-"""
+        --ls      list details of seeds managed by this programme"""
 
 if __name__ == '__main__':
     if len(sys.argv)<2:
@@ -410,7 +419,7 @@ if __name__ == '__main__':
         action_str=sys.argv[1]
 
     if action_str.endswith('help'):
-        log(HELP_TEXT)
+        log(HELP_TEXT,l=0)
     elif action_str.endswith('main'):
         try:
             byrbt_bot=AutoDown()
