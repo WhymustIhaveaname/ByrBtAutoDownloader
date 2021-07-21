@@ -237,6 +237,7 @@ class AutoDown(ContextDecorator):
             self.rmable_avg_val=sum([i['value']*i['size'] for i in self.rmable_seeds])/\
                                 sum([i['size'] for i in self.rmable_seeds])
             log("average seed value: %.2f"%(self.rmable_avg_val))
+            # 删除每天做种率低的，做种率一样（通常因为都是0）删早的
             self.rmable_seeds.sort(key=lambda x: x['seed_time'],reverse=True)
             self.rmable_seeds.sort(key=lambda x: x['value'])
 
