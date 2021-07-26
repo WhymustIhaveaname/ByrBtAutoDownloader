@@ -184,12 +184,11 @@ def transmission_ls():
             if not os.path.samefile(location_info,linux_download_path):
                 continue
 
-            torrent['seed_time']=re.search("Seeding Time.+?([0-9]+) seconds",detailed_info)
-            if torrent['seed_time']:
-                torrent['seed_time']=int(torrent['seed_time'].group(1))/86400 # in day
-            else:
-                assert "Seeding Time" not in detailed_info
-                torrent['seed_time']=1.0
+            #torrent['seed_time']=re.search("Seeding Time.+?([0-9]+) seconds",detailed_info)
+            seed_t=re.search("Date added:(.+)",detailed_info) #Wed Jul 14 21:53:49 2021
+            seed_t=time.strptime(seed_t.group(1).strip(),"%a %b %d %H:%M:%S %Y")
+            seed_t=time.mktime(seed_t)
+            torrent['seed_time']=(time.time()-seed_t)/86400 # in day
 
             torrent['ratio']=re.search("Ratio: ([0-9\\.]+)",detailed_info)
             if torrent['ratio']:
