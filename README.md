@@ -35,7 +35,7 @@
 - [x] 支持使用 Transmission Web 管理种子
 - [x] 有效压榨硬盘空间：在不超过 max_torrent_size 的情况下把最后一点缝隙挤满
 
-<a href="https://bt.byr.cn/promotionlink.php?key=2fa9cf9b8c919fd2c6f72076f6e2ccde"><img src="https://bt.byr.cn/pic/prolink.png" alt="这张北邮人的图片教育网v6才能加载出来"></a>
+<a href="https://bt.byr.cn/promotionlink.php?key=2fa9cf9b8c919fd2c6f72076f6e2ccde"><img src="https://bt.byr.cn/mybar.php?userid=311938.png" alt="这张北邮人的图片教育网v6才能加载出来"></a>
 
 <table>
     <tr>
