@@ -235,7 +235,7 @@ class AutoDown(ContextDecorator):
         if len(self.rmable_seeds)>0:
             self.rmable_avg_val=sum([i['value']*i['size'] for i in self.rmable_seeds])/\
                                 sum([i['size'] for i in self.rmable_seeds])
-            log("average seed value: %.2f"%(self.rmable_avg_val))
+            #log("average seed value: %.2f"%(self.rmable_avg_val))
             # 删除每天做种率低的，做种率一样（通常因为都是0）删早的
             self.rmable_seeds.sort(key=lambda x: x['seed_time'],reverse=True)
             self.rmable_seeds.sort(key=lambda x: x['value'])
@@ -261,7 +261,7 @@ class AutoDown(ContextDecorator):
 
             del_size+=rm_info['size']
             rm_info['deleted']=True
-            log("removed %.2f of %.2f"%(del_size,target_size))
+            #log("removed %.2f of %.2f"%(del_size,target_size))
             if del_size>target_size:
                 break
         return del_size
