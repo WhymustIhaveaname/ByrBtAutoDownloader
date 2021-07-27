@@ -35,13 +35,15 @@
 - [x] 支持使用 Transmission Web 管理种子
 - [x] 有效压榨硬盘空间：在不超过 max_torrent_size 的情况下把最后一点缝隙挤满
 
+<a href="https://bt.byr.cn/promotionlink.php?key=2fa9cf9b8c919fd2c6f72076f6e2ccde"><img src="https://bt.byr.cn/pic/prolink.png" alt="这张北邮人的图片教育网v6才能加载出来"></a>
+
 <table>
     <tr>
         <th width=50%><img src="https://raw.githubusercontent.com/WhymustIhaveaname/ByrBtAutoDownloader/main/images/terminal.png"/></th>
         <th width=50%><img src="https://raw.githubusercontent.com/WhymustIhaveaname/ByrBtAutoDownloader/main/images/web.png"/></th>
     </tr>
     <tr>
-        <th>命令行输出</th>
+        <th>命令行输出 (又改了几版现在更好看了)</th>
         <th>Transmission Web 管理界面</th>
     </tr>
 </table>
