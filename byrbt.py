@@ -131,7 +131,7 @@ def parse_torrent_info(table):
         if is_seeding or is_finished:
             continue
 
-        torrent_info = {'is_new':False,'is_hot':False,'is_recommended':False, 'tag':''}
+        torrent_info = {'tag':''}
 
         title = main_td.text.split('\n')
         torrent_info['title'] = title[0]
@@ -232,13 +232,17 @@ class AutoDown(ContextDecorator):
             i['value']=i['ratio']/i['seed_time']
             i['deleted']=False
             self.rmable_seeds.append(i)
-        if len(self.rmable_seeds)>0:
-            self.rmable_avg_val=sum([i['value']*i['size'] for i in self.rmable_seeds])/\
-                                sum([i['size'] for i in self.rmable_seeds])
-            #log("average seed value: %.2f"%(self.rmable_avg_val))
+        rmable_size=sum([i['size'] for i in self.rmable_seeds])
+        if rmable_size>max_torrent_size/3:
+            self.rmable_avg_val=sum([i['value']*i['size'] for i in self.rmable_seeds])/rmable_size
             # 删除每天做种率低的，做种率一样（通常因为都是0）删早的
             self.rmable_seeds.sort(key=lambda x: x['seed_time'],reverse=True)
             self.rmable_seeds.sort(key=lambda x: x['value'])
+        else:
+            self.rmable_seeds=[]
+        #log(["%.1f, %.2f"%(i['seed_time'],i['value']) for i in self.rmable_seeds],l=0)
+        #log(rmable_size,l=0)
+        #log("average seed value: %.2f"%(self.rmable_avg_val),l=0)
 
     def remove(self,target_size,neo_value):
         del_size=0
@@ -351,8 +355,8 @@ class AutoDown(ContextDecorator):
         for ii,i in enumerate(ok_infos):
             if i['file_size']>rmable_size:
                 continue
-            s_temp='#%d: %s %.2fGB value is %.2f during %.1f day(s) %s'%(ii,i['seed_id'],i['file_size'],i['value'],i['live_time'],i['title'])
-            log('将要下载 %s'%(s_temp))
+            #s_temp='#%d: %s %.2fGB value is %.2f during %.1f day(s) %s'%(ii,i['seed_id'],i['file_size'],i['value'],i['live_time'],i['title'])
+            log('将要下载 #%d %s'%(ii,i))
             if torrent_size+i['file_size']>max_torrent_size:
                 if self.rmable_seeds==None:
                     log("磁盘空间不足(%.1fGB)，将执行自动清理"%(torrent_size))
@@ -443,6 +447,8 @@ if __name__ == '__main__':
             log("",l=3)
     elif action_str.endswith('ls'):
         AutoDown.ls()
+    elif action_str.endswith('rm'):
+        AutoDown().remove_init(transmission_ls())
     else:
         log('invalid argument')
         log(HELP_TEXT,l=0)

@@ -13,7 +13,7 @@ FREE_WT = 1.0               # 对 free、30down、50down 的 buff 大小
 
 COST_RECOVERY_TIME = 7      # 几天之内不能回本（做种比达到1）的种子是绝不会下的
                             # 一周（7.0）已经是很松的条件了
-RM_PEOTECT_TIME = 14        # 几天之内的种子不会被删除
+RM_PEOTECT_TIME = 10        # 几天之内的种子不会被删除
 
 LARGE_FILE_DEBUFF = ((60,0.1),(15,1.0))         # 大文件的 debuff，由点指定的分段线性函数
 SMALL_FILE_DEBUFF = (( 0,0.0),( 2,1.0))         # 小文件的 debuff
