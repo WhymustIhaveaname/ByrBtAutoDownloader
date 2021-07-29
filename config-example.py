@@ -7,7 +7,7 @@ max_torrent_size = 512  # 最大文件大小，GB
 
 # 程序运行的参数，我觉得调得挺好的了，但也可以自己改
 CHECK_PAGE_NUM = 3          # 检查种子页的前多少页，一页大约需要3秒
-UNFAITHFULNESS = 0.5        # 正倾向于换新种子，负倾向于保留旧种子
+UNFAITHFULNESS = -1.0       # 正倾向于换新种子，负倾向于保留旧种子
 FREE_WT = 1.0               # 对 free、30down、50down 的 buff 大小
                             # 换言之，越大越关注做种比，越小越关注上传量
 
@@ -25,6 +25,7 @@ SEED_ID_KEEP_NUM = max_torrent_size//5          # 不检查最近的这么多种
 decaptcha_model = 'captcha_classifier.pkl'  # 验证码识别模型
 cookies_save_path = 'ByrbtCookies.pickle'  # cookies保存路径
 torrent_id_save_path = 'ByrbtTorrentIDs.pickle' # 存一些临时变量
+
 
 assert all([LARGE_FILE_DEBUFF[i][0]>LARGE_FILE_DEBUFF[i+1][0] for i in range(len(LARGE_FILE_DEBUFF)-1)])
 assert all([SMALL_FILE_DEBUFF[i][0]<SMALL_FILE_DEBUFF[i+1][0] for i in range(len(SMALL_FILE_DEBUFF)-1)])
