@@ -7,13 +7,14 @@ max_torrent_size = 512  # 最大文件大小，GB
 
 # 程序运行的参数，我觉得调得挺好的了，但也可以自己改
 CHECK_PAGE_NUM = 3          # 检查种子页的前多少页，一页大约需要3秒
-UNFAITHFULNESS = -1.0       # 正倾向于换新种子，负倾向于保留旧种子
+UNFAITHFULNESS = -2.0       # 正倾向于换新种子，负倾向于保留旧种子
+                            # 换言之，负关注做种比，正关注上传量
 FREE_WT = 1.0               # 对 free、30down、50down 的 buff 大小
                             # 换言之，越大越关注做种比，越小越关注上传量
 
 COST_RECOVERY_TIME = 7      # 几天之内不能回本（做种比达到1）的种子是绝不会下的
                             # 一周（7.0）已经是很松的条件了
-RM_PEOTECT_TIME = 10        # 几天之内的种子不会被删除
+RM_PEOTECT_TIME = 14        # 几天之内的种子不会被删除
 
 LARGE_FILE_DEBUFF = ((60,0.1),(15,1.0))         # 大文件的 debuff，由点指定的分段线性函数
 SMALL_FILE_DEBUFF = (( 0,0.0),( 2,1.0))         # 小文件的 debuff

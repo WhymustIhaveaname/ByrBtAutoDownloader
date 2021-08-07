@@ -325,8 +325,10 @@ class AutoDown(ContextDecorator):
                 continue
 
             # 计算平均每天上传率可以增加多少
-            # live time add 1 to avoid sigularity and to preference old seeds
-            i['value']=(i['finished']+i['downloading'])/((i['live_time']+1.0)*(i['seeding']+2))
+            # downloading is more important than finished, so *1.5
+            # live_time +2.0 to avoid sigularity and to preference old seeds
+            # there will be one more seeding after I downloaded, so seeding +1
+            i['value']=(i['finished']+i['downloading']*1.5)/((i['live_time']+2.0)*(i['seeding']+1))
             if 'twoup' in i['tag']:
                 i['value']*=2
             # free tag's buff, FREE_WT defaults to 1.0
@@ -413,7 +415,9 @@ class AutoDown(ContextDecorator):
         log("There are now %d seeds with total size %.1f GB (after fully downloaded)."%(len(exist_seeds),torrent_size))
         for i in exist_seeds:
             i['value']=i['ratio']/i['seed_time']
-        log("Average value: %.2f"%(sum([i['value']*i['size'] for i in exist_seeds])/torrent_size))
+        tot_upload=sum([i['size']*i['ratio'] for i in exist_seeds])
+        avg_ratio=sum([i['value']*i['size'] for i in exist_seeds])/torrent_size
+        log("Total upload: %.1f GB. Average value: %.2f"%(tot_upload,avg_ratio))
         exist_seeds.sort(key=lambda x:x['seed_time'],reverse=False)
         exist_seeds.sort(key=lambda x:x['value'],reverse=True)
         pretty_text=["\t  id value   ratio stime size(GB) name",]
