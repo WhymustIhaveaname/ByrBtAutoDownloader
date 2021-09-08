@@ -36,9 +36,6 @@ def log(msg,l=1,end="\n",logfile=LOGFILE):
         with open(logfile,"a") as f:
             f.write(tempstr)
 
-# 常量
-_BASE_URL = 'https://bt.byr.cn/'
-
 if osName == 'Windows':
     download_path = os.path.abspath(windows_download_path)
 elif osName == 'Linux':
@@ -47,7 +44,7 @@ elif osName == 'Linux':
 transmission_cmd='transmission-remote -n %s '%(transmission_user_pw)
 
 def get_url(url):
-    return _BASE_URL + url
+    return 'https://byr.pt/%s'%(url,)
 
 def login():
     from decaptcha import DeCaptcha
@@ -63,7 +60,7 @@ def login():
         login_content = session.get(url)
         login_soup = BeautifulSoup(login_content.text, 'lxml')
 
-        img_url = _BASE_URL + login_soup.select('#nav_block > form > table > tr:nth-of-type(3) img')[0].attrs['src']
+        img_url = get_url(login_soup.select('#nav_block > form > table > tr:nth-of-type(3) img')[0].attrs['src'])
         img_file = Image.open(BytesIO(session.get(img_url).content))
 
         captcha_text = decaptcha.decode(img_file)
@@ -379,9 +376,9 @@ class AutoDown(ContextDecorator):
 
     def scan_one_page(self,page):
         if page==0:
-            url="https://bt.byr.cn/torrents.php"
+            url=get_url("torrents.php")
         else:
-            url="https://bt.byr.cn/torrents.php?inclbookmarked=0&pktype=0&incldead=0&spstate=0&page=%d"%(page)
+            url=get_url("torrents.php?inclbookmarked=0&pktype=0&incldead=0&spstate=0&page=%d"%(page))
         try:
             getemp=requests.get(url,cookies=self.cookie_jar,headers=self.headers).content
             torrents_soup = BeautifulSoup(getemp,features='lxml')
