@@ -172,7 +172,7 @@ def transmission_ls():
         torrent = {'id':ts[0],'done':ts[1],'name':ts[-1]}
 
         tracker_info=os.popen(transmission_cmd+"-t %s -it"%(torrent['id'])).read()
-        if any(["tracker.byr.cn" not in i for i in tracker_info.split("\n\n")]):
+        if any([("tracker.byr.cn" not in i and "tracker.byr.pt" not in i) for i in tracker_info.split("\n\n")]):
             continue
 
         detailed_info=os.popen(transmission_cmd+"-t %s -i"%(torrent['id'].strip("*"))).read()
