@@ -256,9 +256,10 @@ class AutoDown(ContextDecorator):
             if "success" not in res:
                 log('删除失败：%s'%(res),l=2)
                 continue
+            time.sleep(0.5+rm_info['size']*0.5) # 等一会儿，等它删完
             if os.path.exists(os.path.join(download_path,rm_info['name'])):
                 log('删除失败，但文件还在：%s'%(res),l=2)
-                continue
+                return del_size
 
             del_size+=rm_info['size']
             rm_info['deleted']=True
