@@ -413,7 +413,7 @@ class AutoDown(ContextDecorator):
         for i in exist_seeds:
             i['value']=i['ratio']/i['seed_time']
         tot_upload=sum([i['size']*i['ratio'] for i in exist_seeds])
-        avg_ratio=sum([i['value']*i['size'] for i in exist_seeds])/torrent_size
+        avg_ratio=sum([i['value']*i['size'] for i in exist_seeds])/torrent_size if torrent_size>0 else float('nan')
         log("Total upload: %.1f GB. Average value: %.2f"%(tot_upload,avg_ratio))
         exist_seeds.sort(key=lambda x:x['seed_time'],reverse=False)
         exist_seeds.sort(key=lambda x:x['value'],reverse=True)
