@@ -1,4 +1,6 @@
 # 原来的 requirements，但我看版本根本不重要嘛
+# 更新：我错了，scikit-learn 的版本很重要，它不向后兼容！
+#      其他包都是声明在外的，就装最新的吧，可以避免和已安装的版本冲突
 #beautifulsoup4==4.8.0
 #lxml==4.4.1
 #numpy==1.17.2
@@ -15,6 +17,7 @@ numpy
 pillow
 requests
 Cython
-scikit-learn
+scikit-learn==0.21.3
+# scikit-learn==0.22.1 可以使用captcha_classifier_sklearn0.22.1.pkl模型
 scipy
 tqdm
