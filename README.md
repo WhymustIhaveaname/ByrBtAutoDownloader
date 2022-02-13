@@ -1,5 +1,7 @@
 # brybt_bot
 
+升级版的[北邮人种子站](https://byr.pt/promotionlink.php?key=2fa9cf9b8c919fd2c6f72076f6e2ccde)全自动下载刷流脚本。最近邀请有点多，可以留言找我要。
+
 **上一个作者 [lipssmycode/byrbt_bot](https://github.com/lipssmycode/byrbt_bot) 不强调这个机器人会删除文件，一上来连警告都没有就把我1个T的文件给删了！！！
 而且原来仓库代码质量低、README 英文和汉字之间没空格、issue 没人理，我决定放弃原来的仓库，慢慢重写全部代码。**
 
@@ -34,8 +36,6 @@
 - [x] 支持自动删除旧种子，下载新种子：使用 UCB 算法决定何时换新种子
 - [x] 支持使用 Transmission Web 管理种子
 - [x] 有效压榨硬盘空间：在不超过 max_torrent_size 的情况下把最后一点缝隙挤满
-
-<a href="https://bt.byr.cn/promotionlink.php?key=2fa9cf9b8c919fd2c6f72076f6e2ccde"><img src="https://bt.byr.cn/mybar.php?userid=311938.png" alt="这张北邮人的图片教育网v6才能加载出来"></a>
 
 <table>
     <tr>
