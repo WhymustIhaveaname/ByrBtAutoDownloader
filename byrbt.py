@@ -10,6 +10,9 @@ from requests.cookies import RequestsCookieJar
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 from config import *
+#和上一个版本兼容，上个版本不可设置 size_ratio
+if 'SIZE_RATIO' not in globals():
+    SIZE_RATIO=1.0
 
 # 判断平台
 osName = platform.system()
@@ -114,6 +117,10 @@ def _calc_size(size):
     return size
 
 def parse_torrent_info(table):
+    """
+        从北邮人的网页上获得种子信息
+        决定下载哪个种子时会用到
+    """
     assert isinstance(table, list)
     torrent_infos = []
     for item in table:
@@ -163,38 +170,52 @@ def execCmd(cmd):
     return text
 
 def transmission_ls():
-    """text_s is list of {'id': '153', 'done': '0%', 'size': '1GB', 'name': 'dadada'}"""
+    """
+        从 transmission 的命令输出中获得本地种子信息
+        直接命令行 --ls 或者删除种子时会用到
+        return: text_s is list of {'id': '153', 'done': '0%', 'size': '1GB', 'name': 'dadada'}
+    """
     text=execCmd(transmission_cmd+'-l')
+    text=text.split('\n')[1:-2] #去掉第一和最后两个（好像是标题啥的？）
     text_s=[]
     log("Collecting detail infos for existed seeds...",l=0)
-    for t in tqdm(text.split('\n')[1:-2],ncols=75,bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}'): #去掉第一和最后两个
+    bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt}"
+    for t in tqdm(text,ncols=75,bar_format=bar_format):
         ts = t.split()
         torrent = {'id':ts[0],'done':ts[1],'name':ts[-1]}
 
+        # 跳过不是北邮人的
         tracker_info=os.popen(transmission_cmd+"-t %s -it"%(torrent['id'])).read()
         if any([("tracker.byr.cn" not in i and "tracker.byr.pt" not in i) for i in tracker_info.split("\n\n")]):
             continue
 
         detailed_info=os.popen(transmission_cmd+"-t %s -i"%(torrent['id'].strip("*"))).read()
         try:
+            # 跳过不在设置文件夹中的文件：那有可能是用户手动下的
             location_info=re.search("Location: (.+)",detailed_info).group(1)
             if not os.path.samefile(location_info,linux_download_path):
                 continue
 
+            # 获取作种时间
             #torrent['seed_time']=re.search("Seeding Time.+?([0-9]+) seconds",detailed_info)
             seed_t=re.search("Date added:(.+)",detailed_info) #Wed Jul 14 21:53:49 2021
             seed_t=time.strptime(seed_t.group(1).strip(),"%a %b %d %H:%M:%S %Y")
             seed_t=time.mktime(seed_t)
             torrent['seed_time']=(time.time()-seed_t)/86400 # in day
 
+            # 种子大小
+            torrent['size']=_calc_size(re.search("Total size:.+?\\((.+?)wanted\\)",detailed_info).group(1))
+
+            # 做种比
             torrent['ratio']=re.search("Ratio: ([0-9\\.]+)",detailed_info)
             if torrent['ratio']:
                 torrent['ratio']=float(torrent['ratio'].group(1))
             else:
-                assert "Ratio: None" in detailed_info
-                torrent['ratio']=0.0
-
-            torrent['size']=_calc_size(re.search("Total size:.+?\\((.+?)wanted\\)",detailed_info).group(1))
+                if "Ratio: None" in detailed_info:
+                    torrent['ratio']=0.0
+                else:
+                    torrent['uploaded']=_calc_size(re.search("Uploaded: (.+?[B])",detailed_info).group(1))
+                    torrent['ratio']=torrent['uploaded']/torrent['size']
         except Exception:
             log("parse transmission's ls failed:\n%s"%(detailed_info),l=3)
             continue
@@ -219,7 +240,18 @@ class AutoDown(ContextDecorator):
         for k, v in byrbt_cookies.items():
             self.cookie_jar[k] = v
 
-    def remove_init(self,tls):
+    def piecewise_linear(pts,x):
+        if len(pts)<2:
+            return 1.0
+        if x>pts[0][0]>pts[1][0] or x<pts[0][0]<pts[1][0]:
+            return pts[0][1]
+        for i in range(len(pts)-1):
+            if pts[i][0]>=x>pts[i+1][0] or pts[i][0]<=x<pts[i+1][0]:
+                return ((pts[i][0]-x)*pts[i+1][1]+(x-pts[i+1][0])*pts[i][1])/(pts[i][0]-pts[i+1][0])
+        else:
+            return 1.0
+
+    def remove_init(self,tls,print_flag=False):
         self.rmable_seeds=[]
         for i in tls:
             if i['id'][-1]=="*": # 忽略未完成的 (后面有星号)
@@ -233,13 +265,28 @@ class AutoDown(ContextDecorator):
         if rmable_size>max_torrent_size/3:
             self.rmable_avg_val=sum([i['value']*i['size'] for i in self.rmable_seeds])/rmable_size
             # 删除每天做种率低的，做种率一样（通常因为都是0）删早的
-            self.rmable_seeds.sort(key=lambda x: x['seed_time'],reverse=True)
-            self.rmable_seeds.sort(key=lambda x: x['value'])
+            self.rmable_seeds.sort(key=lambda x: (x['value'],-x['seed_time']))
         else:
             self.rmable_seeds=[]
-        #log(["%.1f, %.2f"%(i['seed_time'],i['value']) for i in self.rmable_seeds],l=0)
-        #log(rmable_size,l=0)
-        #log("average seed value: %.2f"%(self.rmable_avg_val),l=0)
+        if print_flag:
+            log(["%.1f, %.2f"%(i['value'],i['seed_time']) for i in self.rmable_seeds],l=0)
+            log(rmable_size,l=0)
+
+    def get_seeding_num(self,rm_info):
+        """
+            获取这个种子还有几人在做种
+        """
+        """url=get_url("details.php?id=%d"%(sid))
+        try:
+            getemp=requests.get(url,cookies=self.cookie_jar,headers=self.headers).content
+            torrents_soup = BeautifulSoup(getemp,features='lxml')
+            torrent_table = torrents_soup.select('.torrents > form > tr')[1:] #<table class="torrents" blabla>
+            return parse_torrent_info(torrent_table)
+        except Exception:
+            log("获取失败： %s"%(url),l=2)
+            self.refresh()
+            return []"""
+        pass
 
     def remove(self,target_size,neo_value):
         del_size=0
@@ -250,7 +297,11 @@ class AutoDown(ContextDecorator):
             if neo_value+self.rmable_avg_val*ucb<rm_info['value']:
                 continue
 
-            #log("%.2f+%.2f>%.2f"%(neo_value,self.rmable_avg_val*ucb,rm_info['value']))
+            # TODO: 当我是唯一做种人时，不能删
+            #if self.get_seeding_num(rm_info)<=1:
+            #    rm_info['deleted']=True
+            #    continue
+
             log("正在删除 %s"%(rm_info,))
             res=execCmd(transmission_cmd+'-t %s --remove-and-delete'%(rm_info['id'],))
             if "success" not in res:
@@ -258,12 +309,11 @@ class AutoDown(ContextDecorator):
                 continue
             time.sleep(0.5+rm_info['size']*0.5) # 等一会儿，等它删完
             if os.path.exists(os.path.join(download_path,rm_info['name'])):
-                log('删除失败，但文件还在：%s'%(res),l=2)
+                log('删除成功，但文件还在，您自己看看吧：\n%s'%(res),l=2)
                 return del_size
 
             del_size+=rm_info['size']
             rm_info['deleted']=True
-            #log("removed %.2f of %.2f"%(del_size,target_size))
             if del_size>target_size:
                 break
         return del_size
@@ -292,29 +342,26 @@ class AutoDown(ContextDecorator):
 
         with open(torrent_file_path, 'wb') as f:
             f.write(torrent.content)
+        time.sleep(0.5)
+
         cmd_str = transmission_cmd+'-a "%s" -w %s'%(torrent_file_path,download_path)
-        ret_val = os.system(cmd_str)
-        if ret_val == 0:
+        cmd_rt = os.popen(cmd_str)
+        cmd_rt = cmd_rt.read()
+
+        if "success" in cmd_rt:
+            # 如果成功，输出是
+            # localhost:9091/transmission/rpc/ responded: "success"
             self.existed_torrent.append(torrent_id)
             log("添加种子文件至 Transmisson 成功")
             return True
         else:
-            log("添加种子文件至 Transmisson 失败！",l=2)
+            # 已知的失败原因
+            # Error: invalid or corrupt torrent file
+            log("添加种子文件至 Transmisson 失败！\n%s"%(cmd_rt),l=2)
             os.remove(torrent_file_path)
-            return True # 这个 True 是不要再继续下之后的种子的意思
+            return False
 
-    def piecewise_linear(pts,x):
-        if len(pts)<2:
-            return 1.0
-        if x>pts[0][0]>pts[1][0] or x<pts[0][0]<pts[1][0]:
-            return pts[0][1]
-        for i in range(len(pts)-1):
-            if pts[i][0]>=x>pts[i+1][0] or pts[i][0]<=x<pts[i+1][0]:
-                return ((pts[i][0]-x)*pts[i+1][1]+(x-pts[i+1][0])*pts[i][1])/(pts[i][0]-pts[i+1][0])
-        else:
-            return 1.0
-
-    def download_many(self,torrent_infos,size_ratio=0.01):
+    def download_many(self,torrent_infos):
         ok_infos=[] #将要下载的种子
         for i in torrent_infos:
             if i['seed_id'] in self.existed_torrent:
@@ -350,8 +397,8 @@ class AutoDown(ContextDecorator):
         ok_infos.sort(key=lambda x:x['value'],reverse=True)
         exist_seeds=transmission_ls()
         torrent_size=sum([i['size'] for i in exist_seeds])
-        remain_size=max_torrent_size*size_ratio # 每次下磁盘空间百分之一的种子，一天执行四次的话，一个月换一次血，真合理
-        rmable_size=max_torrent_size #可能被清理空间的上限
+        remain_size=max_torrent_size*(SIZE_RATIO/100.0)
+        rmable_size=max_torrent_size #还能被清理空间的上限
         for ii,i in enumerate(ok_infos):
             if i['file_size']>rmable_size:
                 continue
@@ -401,9 +448,13 @@ class AutoDown(ContextDecorator):
         return num_ok
 
     def start(self):
-        num_ok=self.scan_many_pages(0,CHECK_PAGE_NUM)
-        if num_ok<=CHECK_PAGE_NUM: # 如果前几页看得上的种子不多，就往后再翻几页
-            self.scan_many_pages(CHECK_PAGE_NUM,3*CHECK_PAGE_NUM)
+        num_ok=0
+        for i,j in [(0,1),(1,3),(3,5)]:
+            # 如果前几页看得上的种子不多，就往后再翻几页
+            num_ok+=self.scan_many_pages(CHECK_PAGE_NUM*i,CHECK_PAGE_NUM*j)
+            if num_ok>CHECK_PAGE_NUM:
+                break
+
         with open(torrent_id_save_path,'wb') as f:
             self.existed_torrent=pickle.dump(self.existed_torrent[-SEED_ID_KEEP_NUM:],f)
 
@@ -419,8 +470,11 @@ class AutoDown(ContextDecorator):
         exist_seeds.sort(key=lambda x:x['seed_time'],reverse=False)
         exist_seeds.sort(key=lambda x:x['value'],reverse=True)
         pretty_text=["\t  id value   ratio stime size(GB) name",]
-        pretty_text+=["\t%4d %5.2f/d %5.1f %5.1f %6.1f   %s"\
-                        %(int(i['id']),i['ratio']/i['seed_time'],i['ratio'],i['seed_time'],i['size'],i['name']) for i in exist_seeds]
+        pretty_text+=[
+                "\t%4d %5.2f/d %5.1f %5.1f %6.1f   %s"%\
+                (int(i['id']),i['ratio']/i['seed_time'],i['ratio'],i['seed_time'],i['size'],
+                    (i['name'].encode('utf-8')[0:35]).decode())
+            for i in exist_seeds]
         pretty_text="\n".join(pretty_text)
         log("Sorted by value:\n%s"%(pretty_text),l=0)
 
@@ -450,7 +504,7 @@ if __name__ == '__main__':
     elif action_str.endswith('ls'):
         AutoDown.ls()
     elif action_str.endswith('rm'):
-        AutoDown().remove_init(transmission_ls())
+        AutoDown().remove_init(transmission_ls(),print_flag=True)
     else:
         log('invalid argument')
         log(HELP_TEXT,l=0)
