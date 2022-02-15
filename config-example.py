@@ -1,9 +1,14 @@
 # ##################需要配置的变量###################
-username = '用户名'
-passwd = '密码'
-transmission_user_pw = 'user:passwd'  # transmission的用户名和密码，按照格式填入
-linux_download_path = '<path_to_download_dir>'  # 下载路径
-max_torrent_size = 512  # 最大文件大小，GB
+
+username = '用户名' # 北邮人的用户名
+passwd   = '密码'
+transmission_user_pw = 'user:passwd'             # transmission的用户名和密码，按照格式填入
+linux_download_path  = '<path_to_download_dir>'  # 下载路径
+max_torrent_size     = 512    # 最大文件大小，GB
+user_id              = 123456 # 北邮人的 userid, 用于获取做种状态
+                              # 在首页点击自己的名字, 之后查看浏览器地址栏就可以看到
+                              # 比如我的是 byr.pt/userdetails.php?id=311938
+                              # 理论上可以自动获取, 但是我好懒
 
 # 程序运行的参数，我觉得调得挺好的了，但也可以自己改
 CHECK_PAGE_NUM = 3          # 检查种子页的前多少页，一页大约需要3秒
