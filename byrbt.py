@@ -183,12 +183,10 @@ def transmission_ls():
         torrent = {'id':ts[0],'done':ts[1],'name':ts[-1]}
 
         # 跳过不是北邮人的
-        #tracker_info=os.popen(transmission_cmd+"-t %s -it"%(torrent['id'])).read()
         tracker_info=execCmd(transmission_cmd+"-t %s -it"%(torrent['id']))
         if any([("tracker.byr.cn" not in i and "tracker.byr.pt" not in i) for i in tracker_info.split("\n\n")]):
             continue
 
-        #detailed_info=os.popen(transmission_cmd+"-t %s -i"%(torrent['id'].strip("*"))).read()
         detailed_info=execCmd(transmission_cmd+"-t %s -i"%(torrent['id'].strip("*")))
         try:
             # 跳过不在设置文件夹中的文件：那有可能是用户手动下的
@@ -236,18 +234,18 @@ class AutoDown(ContextDecorator):
         # 已经存在的种子的 seed_id, 不必须, 但可以根据它跳过一些不必要操作
         if os.path.exists(torrent_id_save_path):
             with open(torrent_id_save_path,'rb') as f:
-                self.existed_torrent=pickle.load(f)
+                self.exist_torrent_ids=pickle.load(f)
         else:
-            self.existed_torrent=[]
+            self.exist_torrent_ids=[]
         # 可能被移除的种子,由 remove_init 负责初始化
         self.rmable_seeds=None
-        # 做种人数很少的列表, 由 get_seeding_nums 负责初始化
+        # 做种人数很少的列表, 由 remove 调用 get_seeding_nums 负责初始化
         self.seeding_nums=None
         # 已经存在的种子的详情
-        self.exist_seeds=transmission_ls()
-        self.torrent_size=sum([i['size'] for i in self.exist_seeds])
-        # 本次运行被允许下这么大的文件
-        self.remain_size=max_torrent_size*(SIZE_RATIO/100.0)
+        self.local_torrents=transmission_ls()
+        self.local_torrent_size=sum([i['size'] for i in self.local_torrents])
+        # 本次运行大约要下这么大的文件
+        self.remain_quota=max_torrent_size*(SIZE_RATIO/100.0)
         # 剩余容量(包含可能被删除的)
         self.remain_capacity=max_torrent_size
 
@@ -268,9 +266,9 @@ class AutoDown(ContextDecorator):
         else:
             return 1.0
 
-    def remove_init(self,tls,print_flag=False):
+    def remove_init(self,print_flag=False):
         self.rmable_seeds=[]
-        for i in tls:
+        for i in self.local_torrents:
             if i['id'][-1]=="*": # 忽略未完成的 (后面有星号)
                 continue
             if i['seed_time']<RM_PEOTECT_TIME:
@@ -287,11 +285,11 @@ class AutoDown(ContextDecorator):
         else:
             self.rmable_seeds=[]
             rmable_size=0
-        self.remain_capacity=min(self.remain_capacity,max_torrent_size-self.torrent_size+rmable_size)
+        self.remain_capacity=min(self.remain_capacity,max_torrent_size-self.local_torrent_size+rmable_size)
         if print_flag:
             log(["%.1f GB, %.2f day"%(i['value'],i['seed_time']) for i in self.rmable_seeds],l=0)
             log("%.2f %.2f"%(rmable_size,self.remain_capacity),l=0)
-            log(self.rmable_avg_val)
+            log(self.rmable_avg_val,l=0)
 
     def get_seeding_nums(self):
         """
@@ -367,7 +365,7 @@ class AutoDown(ContextDecorator):
             del_size+=rm_info['size']
             if del_size>target_size:
                 break
-        self.torrent_size-=removed_size
+        self.local_torrent_size-=removed_size
         return del_size
 
     def download_one(self, torrent_id):
@@ -389,7 +387,7 @@ class AutoDown(ContextDecorator):
         torrent_file_path = os.path.join(download_path,torrent_file_name)
         if os.path.exists(torrent_file_path):
             log("种子文件已存在")
-            self.existed_torrent.append(torrent_id)
+            self.exist_torrent_ids.append(torrent_id)
             return False
 
         with open(torrent_file_path, 'wb') as f:
@@ -397,14 +395,12 @@ class AutoDown(ContextDecorator):
         time.sleep(0.5)
 
         cmd_str = transmission_cmd+'-a "%s" -w %s'%(torrent_file_path,download_path)
-        #cmd_rt = os.popen(cmd_str)
-        #cmd_rt = cmd_rt.read()
         cmd_rt = execCmd(cmd_str)
 
         if "success" in cmd_rt:
             # 如果成功，输出是
             # localhost:9091/transmission/rpc/ responded: "success"
-            self.existed_torrent.append(torrent_id)
+            self.exist_torrent_ids.append(torrent_id)
             log("添加种子文件至 Transmisson 成功")
             return True
         else:
@@ -418,7 +414,7 @@ class AutoDown(ContextDecorator):
         # 认为值得下载的种子
         ok_infos=[]
         for i in torrent_infos:
-            if i['seed_id'] in self.existed_torrent:
+            if i['seed_id'] in self.exist_torrent_ids:
                 continue
             if i['seeding']<=0 or i['finished']<=0:
                 continue
@@ -452,15 +448,15 @@ class AutoDown(ContextDecorator):
             log('将要下载 #%d %s'%(ii,i))
 
             # 如果种子超大了, 需要执行一下清理
-            if self.torrent_size+i['file_size']>max_torrent_size:
+            if self.local_torrent_size+i['file_size']>max_torrent_size:
                 if self.rmable_seeds==None:
-                    log("磁盘空间不足 (%.2f GB)，将执行自动清理"%(self.torrent_size))
-                    self.remove_init(self.exist_seeds)
+                    log("磁盘空间不足 (%.2f GB)，将执行自动清理"%(self.local_torrent_size))
+                    self.remove_init()
                     if i['file_size']>self.remain_capacity:
                         log("最大可能腾出 %.2f GB 空间, 小于此种子的 %.2f GB, 直接跳过"%(self.remain_capacity,i['file_size']))
                         continue
                 # 想要移除总计这么大的种子
-                target_size=self.torrent_size+i['file_size']-max_torrent_size
+                target_size=self.local_torrent_size+i['file_size']-max_torrent_size
                 # 真正被移除了的种子
                 removed_size=self.remove(target_size,i['value'])
                 if removed_size<target_size:
@@ -470,12 +466,12 @@ class AutoDown(ContextDecorator):
 
             # 真正的下载只需要一行
             if self.download_one(i['seed_id']):
-                self.torrent_size+=i['file_size']
-                self.remain_size-=i['file_size']
+                self.local_torrent_size+=i['file_size']
+                self.remain_quota-=i['file_size']
                 self.remain_capacity-=i['file_size']
             # 如果已经达到了一次要下的大小
-            if self.remain_size<=0:
-                log("reach remain_size (%.2f), quit"%(self.remain_size))
+            if self.remain_quota<=0:
+                #log("reach remain_size (%.2f), quit"%(self.remain_quota))
                 break
         return len(ok_infos)
 
@@ -510,11 +506,11 @@ class AutoDown(ContextDecorator):
             num_ok+=self.scan_many_pages(CHECK_PAGE_NUM*i,CHECK_PAGE_NUM*j)
             if num_ok>CHECK_PAGE_NUM:
                 break
-            if self.remain_size<=0:
+            if self.remain_quota<=0:
                 break
 
         with open(torrent_id_save_path,'wb') as f:
-            self.existed_torrent=pickle.dump(self.existed_torrent[-SEED_ID_KEEP_NUM:],f)
+            self.exist_torrent_ids=pickle.dump(self.exist_torrent_ids[-SEED_ID_KEEP_NUM:],f)
 
     def ls():
         exist_seeds=transmission_ls()
@@ -566,7 +562,7 @@ if __name__ == '__main__':
         AutoDown().get_seeding_nums()
     elif action_str.endswith('rm'):
         byr_bot=AutoDown()
-        byr_bot.remove_init(byr_bot.exist_seeds,print_flag=True)
+        byr_bot.remove_init(print_flag=True)
     else:
         log('invalid argument')
         log(HELP_TEXT,l=0)
