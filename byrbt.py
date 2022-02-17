@@ -277,18 +277,19 @@ class AutoDown(ContextDecorator):
             i['deleted']=False
             self.rmable_seeds.append(i)
 
-        if len(self.rmable_seeds)>5:
+        rmable_size=sum([i['size'] for i in self.rmable_seeds])
+        if rmable_size>max_torrent_size*(SIZE_RATIO/100.0)*5:
             # 删除每天做种率低的，做种率一样（通常因为都是0）删早的
             self.rmable_seeds.sort(key=lambda x: (x['value'],-x['seed_time']))
-            rmable_size=sum([i['size'] for i in self.rmable_seeds])
             self.rmable_avg_val=sum([i['value']*i['size'] for i in self.rmable_seeds])/rmable_size
         else:
             self.rmable_seeds=[]
             rmable_size=0
         self.remain_capacity=min(self.remain_capacity,max_torrent_size-self.local_torrent_size+rmable_size)
+
         if print_flag:
             log(["%.1f GB, %.2f day"%(i['value'],i['seed_time']) for i in self.rmable_seeds],l=0)
-            log("%.2f %.2f"%(rmable_size,self.remain_capacity),l=0)
+            log("rmable_size: %.2f, self.remain_capacity: %.2f"%(rmable_size,self.remain_capacity),l=0)
             log(self.rmable_avg_val,l=0)
 
     def get_seeding_nums(self):
