@@ -44,6 +44,9 @@ if osName == 'Windows':
 elif osName == 'Linux':
     download_path = os.path.abspath(linux_download_path)
 
+# 进度条的格式
+bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt}"
+
 def get_url(url):
     return 'https://byr.pt/%s'%(url,)
 
@@ -97,19 +100,38 @@ def _get_tag(tag):
     if len(tag)>0:
         return tag.split('_')[0] # 去掉最后的 _bg
 
-def _calc_size(size):
-    size=size.strip()
+def _calc_size_byr(size):
+    """
+        将文字形式的 xx MB 转换为以 GB 为单位的浮点数
+        北邮人是1024派的, Linux 是 1000 派的, 所以 GB 会差 1-(1000/1024)**3=6.9%
+    """
+    size=size.strip().upper()
     if size.endswith("GB"):
-        size=float(size[0:-2])
-    elif size.endswith("TB"):
-        size=float(size[0:-2])*1000.0
+        size=float(size[0:-2])*(1024**3)/(1000**3)
     elif size.endswith("MB"):
-        size=float(size[0:-2])/1000.0
+        size=float(size[0:-2])*(1024**2)/(1000**3)
     elif size.endswith("KB"):
-        size=float(size[0:-2])/100000.0
+        size=float(size[0:-2])*(1024**1)/(1000**3)
+    elif size.endswith("TB"):
+        size=float(size[0:-2])*(1024**4)/(1000**3)
     else:
         log("size format error: %s"%(size),l=2)
-        size=1.0
+        size=(1024**3)/(1000**3)
+    return size
+
+def _calc_size(size):
+    size=size.strip().upper()
+    if size.endswith("GB"):
+        size=float(size[0:-2])
+    elif size.endswith("MB"):
+        size=float(size[0:-2])/1000
+    elif size.endswith("KB"):
+        size=float(size[0:-2])/1000**2
+    elif size.endswith("TB"):
+        size=float(size[0:-2])*1000
+    else:
+        log("size format error: %s"%(size),l=2)
+        size=(1024**3)/(1000**3)
     return size
 
 def parse_torrent_info(table):
@@ -144,7 +166,7 @@ def parse_torrent_info(table):
             torrent_info['tag'] = _get_tag(tds[1].select('table > tr')[0].attrs['class'][0])
 
         torrent_info['cat'] = tds[0].select('img')[0].attrs['title']
-        torrent_info['file_size'] = _calc_size(tds[6].text)
+        torrent_info['file_size'] = _calc_size_byr(tds[6].text)
         torrent_info['seeding'] = int(tds[7].text) if tds[7].text.isdigit() else -1
         torrent_info['downloading'] = int(tds[8].text) if tds[8].text.isdigit() else 0
         torrent_info['finished'] = int(tds[9].text) if tds[9].text.isdigit() else -1
@@ -177,7 +199,6 @@ def transmission_ls():
     text=text.split('\n')[1:-2] #去掉第一和最后两个（好像是标题啥的？）
     text_s=[]
     log("Collecting detail infos for existed seeds...",l=0)
-    bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt}"
     for t in tqdm(text,ncols=75,bar_format=bar_format):
         ts = t.split()
         torrent = {'id':ts[0],'done':ts[1],'name':ts[-1]}
@@ -290,9 +311,9 @@ class AutoDown(ContextDecorator):
         if print_flag:
             log(["%.1f GB, %.2f day"%(i['value'],i['seed_time']) for i in self.rmable_seeds],l=0)
             log("rmable_size: %.2f, self.remain_capacity: %.2f"%(rmable_size,self.remain_capacity),l=0)
-            log(self.rmable_avg_val,l=0)
+            log("self.rmable_avg_val: %.4f"%(self.rmable_avg_val),l=0)
 
-    def get_seeding_nums(self):
+    def get_seeding_nums(self,print_flag=False):
         """
             获取种子们还有几人在做种
             问题在于我不知道本地的种子的 id, 文件名也不一样, 大小也可能差 1 GB
@@ -313,33 +334,40 @@ class AutoDown(ContextDecorator):
             if seeding_info.table==None:
                 log("北邮人上显示您现在没有任何做种, 请检查您的 user_id (%s) 和做种状态"%(user_id),l=2)
                 return {}
-            for tr in seeding_info.table.find_all('tr',recursive=False):
+            trs=[]
+            for tr in seeding_info.table.find_all('tr',recursive=False)[1:]:
                 tds=[i for i in tr.find_all('td',recursive=False)]
-                snum=tds[3].text.strip() # seeding number
-                if snum=='1':
-                    try:
-                        time.sleep(0.5) #不请求太频繁是爬虫的美德
-                        seed_detail=get_url(tds[1].a['href']) #details.php?id=317580&hit=1
-                        seed_detail=requests.get(seed_detail,cookies=self.cookie_jar,headers=self.headers)
-                        seed_detail=seed_detail.content.decode(seed_detail.encoding)
-                        seed_detail=BeautifulSoup(seed_detail,features='lxml')
-                        seed_detail=seed_detail.text
-                        seed_hash=re.search("Hash码: ([0-9a-f]+)",seed_detail)
-                        seed_hash=seed_hash.group(1)
-                        if len(seed_hash)!=40:
-                            log("seed_hash len incorrect? %s\n%s"%(seed_hash,tds[1]),l=2)
-                        dict_re[seed_hash]=1
-                    except:
-                        log("error while getting seed hash",l=3)
-        except:
+                tds[3]=tds[3].text.strip() # seeding number
+                if not tds[3].isdecimal():
+                    log("seeding num not decimal: %s\n%s"%(tds[3],tr.prettify()),l=2)
+                if tds[3]=='1':
+                    trs.append(tds)
+            for tds in tqdm(trs,ncols=75,bar_format=bar_format):
+                try:
+                    time.sleep(0.5) #不请求太频繁是爬虫的美德
+                    seed_detail=get_url(tds[1].a['href']) #details.php?id=317580&hit=1
+                    seed_detail=requests.get(seed_detail,cookies=self.cookie_jar,headers=self.headers)
+                    seed_detail=seed_detail.content.decode(seed_detail.encoding)
+                    seed_detail=BeautifulSoup(seed_detail,features='lxml')
+                    seed_detail=seed_detail.text
+                    seed_hash=re.search("Hash码: ([0-9a-f]+)",seed_detail)
+                    seed_hash=seed_hash.group(1)
+                    if len(seed_hash)!=40:
+                        log("seed_hash len incorrect? %s\n%s"%(seed_hash,tds[1]),l=2)
+                    dict_re[seed_hash]=int(tds[3])
+                except Exception:
+                    log("error while getting seed hash",l=3)
+        except Exception:
             log("error while getting seed number",l=3)
-        log(dict_re,l=0)
+        if print_flag:
+            log(dict_re,l=0)
+            log("len(seeding_nums): %d"%(len(dict_re)),l=0)
         return dict_re
 
     def remove(self,target_size,neo_value):
         # 用于忽略我是唯一做种人的
         if self.seeding_nums==None:
-            self.seeding_nums=get_seeding_nums()
+            self.seeding_nums=self.get_seeding_nums()
 
         del_size=0
         for rm_info in self.rmable_seeds:
@@ -366,7 +394,7 @@ class AutoDown(ContextDecorator):
             del_size+=rm_info['size']
             if del_size>target_size:
                 break
-        self.local_torrent_size-=removed_size
+        self.local_torrent_size-=del_size
         return del_size
 
     def download_one(self, torrent_id):
@@ -420,11 +448,11 @@ class AutoDown(ContextDecorator):
             if i['seeding']<=0 or i['finished']<=0:
                 continue
 
-            # 计算平均每天上传率可以增加多少
-            # downloading is more important than finished, so *1.5
-            # live_time +2.0 to avoid sigularity and to preference old seeds
-            # there will be one more seeding after I downloaded, so seeding +1
-            i['value']=(i['finished']+i['downloading']*1.5)/((i['live_time']+2.0)*(i['seeding']+1))
+            # 计算种子的价值, i.e. 平均每天上传率可以增加多少
+            # 基本公式是 i['value']=i['finished']/(i['live_time']*i['seeding'])
+            # 下载中(downloading)虽然我赶不上上传, 但是说明种子很火, 所以我觉得比已完成(finished)更重要, 值得乘个 buff
+            # live_time 是以天为单位的, 加二是避免除零错误和更倾向旧种子
+            i['value']=(i['finished']+i['downloading']*1.5)/((i['live_time']+2.0)*(i['seeding']+i['downloading']+1))
             if 'twoup' in i['tag']:
                 i['value']*=2
             # free tag's buff, FREE_WT defaults to 1.0
@@ -446,15 +474,17 @@ class AutoDown(ContextDecorator):
         for ii,i in enumerate(ok_infos):
             if i['file_size']>self.remain_capacity:
                 continue
-            log('将要下载 #%d %s'%(ii,i))
+            pretty_info="{seed_id: %s, file_size: %.3f, seeding: %d, downloading: %d, finished: %d, live_time: %.2f, value: %.4f, cat: %s, tag: %s, title: %s, sub_title: %s}"\
+                        %(i['seed_id'],i['file_size'],i['seeding'],i['downloading'],i['finished'],i['live_time'],i['value'],i['cat'],i['tag'],i['title'],i['sub_title'])
+            log('将要下载 #%d %s'%(ii,pretty_info))
 
             # 如果种子超大了, 需要执行一下清理
             if self.local_torrent_size+i['file_size']>max_torrent_size:
                 if self.rmable_seeds==None:
-                    log("磁盘空间不足 (%.2f GB)，将执行自动清理"%(self.local_torrent_size))
+                    log("磁盘空间不足 (%.3f GB)，将执行自动清理"%(self.local_torrent_size))
                     self.remove_init()
                     if i['file_size']>self.remain_capacity:
-                        log("最大可能腾出 %.2f GB 空间, 小于此种子的 %.2f GB, 直接跳过"%(self.remain_capacity,i['file_size']))
+                        log("最大可能腾出 %.3f GB 空间, 小于此种子的 %.3f GB, 直接跳过"%(self.remain_capacity,i['file_size']))
                         continue
                 # 想要移除总计这么大的种子
                 target_size=self.local_torrent_size+i['file_size']-max_torrent_size
@@ -516,7 +546,7 @@ class AutoDown(ContextDecorator):
     def ls():
         exist_seeds=transmission_ls()
         torrent_size=sum([i['size'] for i in exist_seeds])
-        log("There are now %d seeds with total size %.2f GB (after fully downloaded)."%(len(exist_seeds),torrent_size))
+        log("There are now %d seeds with total size %.3f GB (after fully downloaded)."%(len(exist_seeds),torrent_size))
         for i in exist_seeds:
             i['value']=i['ratio']/i['seed_time']
         tot_upload=sum([i['size']*i['ratio'] for i in exist_seeds])
@@ -560,10 +590,9 @@ if __name__ == '__main__':
         AutoDown.ls()
     # 以下是用于调试的选项
     elif action_str.endswith('snum'):
-        AutoDown().get_seeding_nums()
+        AutoDown().get_seeding_nums(print_flag=True)
     elif action_str.endswith('rm'):
-        byr_bot=AutoDown()
-        byr_bot.remove_init(print_flag=True)
+        AutoDown().remove_init(print_flag=True)
     else:
         log('invalid argument')
         log(HELP_TEXT,l=0)

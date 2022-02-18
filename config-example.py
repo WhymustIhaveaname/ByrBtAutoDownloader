@@ -23,14 +23,14 @@ UNFAITHFULNESS = -2.0       # 正倾向于换新种子，负倾向于保留旧�
 FREE_WT = 1.0               # 对 free、30down、50down 的 buff 大小
                             # 换言之，越大越关注做种比，越小越关注上传量
 
-COST_RECOVERY_TIME = 7      # 几天之内不能回本（做种比达到1）的种子是绝不会下的
+COST_RECOVERY_TIME = 5      # 几天之内不能回本（做种比达到1）的种子是绝不会下的
                             # 一周（7.0）已经是很松的条件了
 
-RM_PEOTECT_TIME = 14        # 几天之内的种子不会被删除
+RM_PEOTECT_TIME = 15        # 几天之内的种子不会被删除
 
 LARGE_FILE_DEBUFF = ((500,0.01),(60,0.1),(15,1.0)) # 大文件的 debuff，由点指定的分段线性函数
 SMALL_FILE_DEBUFF = ((  0, 0.1),( 2,1.0))          # 小文件的 debuff
-SEED_NUM_DEBUFF = ((12,0.5),(6,0.6),(5,1.0))       # 有很多人做种时的 debuff
+SEED_NUM_DEBUFF   = (( 12, 0.3),( 6,0.6),(5,1.0))  # 有很多人做种时的 debuff
 SEED_ID_KEEP_NUM = max_torrent_size//5             # 不检查最近的这么多种子，大约1T200个即可
 
 # 程序临时文件存储路径
