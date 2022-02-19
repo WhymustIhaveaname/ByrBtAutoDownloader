@@ -378,6 +378,7 @@ class AutoDown(ContextDecorator):
                 continue
             if rm_info['hash'] in self.seeding_nums:
                 log("本应删除但我是最后一个做种者了: %s"%(rm_info))
+                rm_info['deleted']=True
                 continue
 
             log("正在删除 %s"%(rm_info,))
@@ -545,23 +546,23 @@ class AutoDown(ContextDecorator):
 
     def ls():
         exist_seeds=transmission_ls()
+
         torrent_size=sum([i['size'] for i in exist_seeds])
-        log("There are now %d seeds with total size %.3f GB (after fully downloaded)."%(len(exist_seeds),torrent_size))
-        for i in exist_seeds:
-            i['value']=i['ratio']/i['seed_time']
         tot_upload=sum([i['size']*i['ratio'] for i in exist_seeds])
-        avg_ratio=sum([i['value']*i['size'] for i in exist_seeds])/torrent_size if torrent_size>0 else float('nan')
-        log("Total upload: %.1f GB. Average value: %.2f (1/day)"%(tot_upload,avg_ratio))
-        exist_seeds.sort(key=lambda x:x['seed_time'],reverse=False)
-        exist_seeds.sort(key=lambda x:x['value'],reverse=True)
-        pretty_text=["\t  id value   ratio stime size(GB) name",]
-        pretty_text+=[
-                "\t%4d %5.2f/d %5.1f %5.1f %6.1f   %s"%\
-                (int(i['id']),i['ratio']/i['seed_time'],i['ratio'],i['seed_time'],i['size'],
-                    (i['name'].encode('utf-8')[0:35]).decode())
-            for i in exist_seeds]
+        if len(exist_seeds)>0:
+            avg_ratio=sum(i['ratio']*i['size'] for i in exist_seeds)/sum([i['size']*i['seed_time'] for i in exist_seeds])
+        else:
+            avg_ratio=float('nan')
+        log("There are now %d seeds with total size %.3f GB (after fully downloaded)."%(len(exist_seeds),torrent_size))
+        log("Total upload: %.1f GB. Average value(ratio per day): %.2f"%(tot_upload,avg_ratio))
+
+        exist_seeds.sort(key=lambda x:(-x['ratio']/x['seed_time'],x['seed_time']))
+        pretty_text=["\t  id value ratio stime size(GB) name",]
+        pretty_text+=["\t%4d %5.2f %5.1f %5.1f %6.1f   %s"\
+                      %(int(i['id']),i['ratio']/i['seed_time'],i['ratio'],i['seed_time'],i['size'],(i['name'].encode('utf-8')[0:38]).decode())
+                      for i in exist_seeds]
         pretty_text="\n".join(pretty_text)
-        log("Sorted by value:\n%s"%(pretty_text),l=0)
+        log("Sorted by value(ratio per day):\n%s"%(pretty_text),l=0)
 
 HELP_TEXT="""
     ByrBt Auto-Downloader:
