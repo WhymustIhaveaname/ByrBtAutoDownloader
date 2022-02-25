@@ -44,9 +44,6 @@ if osName == 'Windows':
 elif osName == 'Linux':
     download_path = os.path.abspath(linux_download_path)
 
-# 进度条的格式
-bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt}"
-
 def get_url(url):
     return 'https://byr.pt/%s'%(url,)
 
@@ -187,6 +184,9 @@ def execCmd(cmd):
         text = r.read()
     return text
 
+# 进度条的格式
+bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt}"
+# 命令行管理 transmission 命令开头, transmission_user_pw 来自 config.py
 transmission_cmd='transmission-remote -n %s '%(transmission_user_pw)
 
 def transmission_ls():
@@ -196,12 +196,12 @@ def transmission_ls():
         return: text_s is list of {'id': '153', 'done': '0%', 'size': '1GB', 'name': 'dadada'}
     """
     text=execCmd(transmission_cmd+'-l')
-    text=text.split('\n')[1:-2] #去掉第一和最后两个（好像是标题啥的？）
+    text=text.strip().split('\n')[1:-1] #第一行是列名, 最后一行是总计
     text_s=[]
     log("Collecting detail infos for existed seeds...",l=0)
     for t in tqdm(text,ncols=75,bar_format=bar_format):
         ts = t.split()
-        torrent = {'id':ts[0],'done':ts[1],'name':ts[-1]}
+        torrent = {'id':ts[0],'done':ts[1]} #,'name':" ".join(ts[9:])}
 
         # 跳过不是北邮人的
         tracker_info=execCmd(transmission_cmd+"-t %s -it"%(torrent['id']))
@@ -215,15 +215,20 @@ def transmission_ls():
             if not os.path.samefile(location_info,linux_download_path):
                 continue
 
+            # 种子名称, 大小, 哈希
+            # 一个典型哈希: d897f7f91af135b6507c6e5c4995852ef3401319
+            torrent['name']=re.search("Name: (.+)",detailed_info).group(1)
+            torrent['size']=_calc_size(re.search("Total size:.+?\\((.+?)wanted\\)",detailed_info).group(1))
+            torrent['hash']=re.search("Hash: ([0-9a-f]+)",detailed_info).group(1)
+            if len(torrent['hash'])!=40:
+                log("Hash length incorret: %d %s\n%s"%(len(torrent['hash']),torrent['hash'],detailed_info),l=2)
+
             # 获取作种时间
-            #torrent['seed_time']=re.search("Seeding Time.+?([0-9]+) seconds",detailed_info)
+            #torrent['seed_time']=re.search("Seeding Time.+?([0-9]+) seconds",detailed_info) #忘了为什么不行了,但注释掉一定是不行
             seed_t=re.search("Date added:(.+)",detailed_info) #Wed Jul 14 21:53:49 2021
             seed_t=time.strptime(seed_t.group(1).strip(),"%a %b %d %H:%M:%S %Y")
             seed_t=time.mktime(seed_t)
             torrent['seed_time']=(time.time()-seed_t)/86400 # in day
-
-            # 种子大小
-            torrent['size']=_calc_size(re.search("Total size:.+?\\((.+?)wanted\\)",detailed_info).group(1))
 
             # 做种比
             torrent['ratio']=re.search("Ratio: ([0-9\\.]+)",detailed_info)
@@ -235,11 +240,6 @@ def transmission_ls():
                 else:
                     torrent['uploaded']=_calc_size(re.search("Uploaded: (.+?[B])",detailed_info).group(1))
                     torrent['ratio']=torrent['uploaded']/torrent['size']
-
-            # 哈希: d897f7f91af135b6507c6e5c4995852ef3401319
-            torrent['hash']=re.search("Hash: ([0-9a-f]+)",detailed_info).group(1)
-            if len(torrent['hash'])!=40:
-                log("Hash length incorret: %d %s\n%s"%(len(torrent['hash']),torrent['hash'],detailed_info),l=2)
         except Exception:
             log("parse transmission's ls failed:\n%s"%(detailed_info),l=3)
             continue
@@ -559,7 +559,7 @@ class AutoDown(ContextDecorator):
         exist_seeds.sort(key=lambda x:(-x['ratio']/x['seed_time'],x['seed_time']))
         pretty_text=["\t  id value ratio stime size(GB) name",]
         pretty_text+=["\t%4d %5.2f %5.1f %5.1f %6.1f   %s"\
-                      %(int(i['id']),i['ratio']/i['seed_time'],i['ratio'],i['seed_time'],i['size'],(i['name'].encode('utf-8')[0:38]).decode())
+                      %(int(i['id']),i['ratio']/i['seed_time'],i['ratio'],i['seed_time'],i['size'],(i['name'].encode('utf-8')[0:38]).decode(errors='ignore'))
                       for i in exist_seeds]
         pretty_text="\n".join(pretty_text)
         log("Sorted by value(ratio per day):\n%s"%(pretty_text),l=0)
