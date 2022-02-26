@@ -10,12 +10,12 @@
 - [x] 支持自动删除旧种子以下载新种子：使用 UCB 算法决定何时换新种子
 - [x] 支持使用 Transmission Web 管理种子(这其实是 Tranmission 的自带功能)
 - [x] 有效压榨硬盘空间：在不超过 `max_torrent_size` 的情况下把最后一点缝隙挤满
-- [ ] 不删除自己是最后一个做种者的种子，薪火相传，不能让种子断在我手里
+- [x] 不删除自己是最后一个做种者的种子，薪火相传，不能让种子断在我手里
 
 <table>
     <tr>
-        <th width=50%><img src="https://raw.githubusercontent.com/WhymustIhaveaname/ByrBtAutoDownloader/main/images/terminal.png"/></th>
-        <th width=50%><img src="https://raw.githubusercontent.com/WhymustIhaveaname/ByrBtAutoDownloader/main/images/web.png"/></th>
+        <th width=65%><img src="https://raw.githubusercontent.com/WhymustIhaveaname/ByrBtAutoDownloader/main/images/terminal.png"/></th>
+        <th width=35%><img src="https://raw.githubusercontent.com/WhymustIhaveaname/ByrBtAutoDownloader/main/images/web.png"/></th>
     </tr>
     <tr>
         <th>命令行输出 (又改了几版现在更好看了)</th>
@@ -25,17 +25,17 @@
 
 ### Usage
 
-* 安装相应依赖包
+1. 安装相应依赖包
 
    ```shell
    python3 -m pip install -r requirements.txt
    ```
 
-* 安装 Transmission
+2. 安装 Transmission
 
    [Transmission 搭建笔记](https://github.com/WhymustIhaveaname/Transmission-Block-Xunlei/blob/main/%E6%90%AD%E5%BB%BA%E7%AC%94%E8%AE%B0.md)
 
-* 复制 config-example.py 至 config.py，并更改以下信息。
+3. 复制 config-example.py 至 config.py，并更改以下信息。
 
     **注意 download_path 不要填自己正在用的文件夹，里面的文件可能会被删除！**
 
@@ -49,14 +49,14 @@
                                   # 在首页点击自己的名字, 之后查看浏览器地址栏就可以看到
     ```
 
-* 启动！
+4. 启动！
 
    ```shell
    python3 byrbt.py --help
    python3 byrbt.py --main
    ```
 
-* 使用 crontab 重复执行脚本
+5. 使用 crontab 重复执行脚本
 
     我的 crontab 是
 
@@ -68,7 +68,7 @@
     每次执行大约会换掉 `max_torrent_size*SIZE_RATIO(default=1%)` 的东西，所以如果一天执行四次，这样就是一个月换一遍，完美。
     更多信息见 [使用crontab重复执行脚本](https://github.com/WhymustIhaveaname/TsinghuaTunet#%E4%BD%BF%E7%94%A8crontab%E9%87%8D%E5%A4%8D%E6%89%A7%E8%A1%8C%E8%84%9A%E6%9C%AC)。
     
-* 我有好几块硬盘怎么办？
+6. 我有好几块硬盘怎么办？
 
     [Issue 4: 支持多块硬盘](https://github.com/WhymustIhaveaname/ByrBtAutoDownloader/issues/4)
 
@@ -102,7 +102,7 @@ lipssmycode 基本上就是个贼。
 - [x] 删除没用的神经网络文件
 - [x] 解决种子下载名字不对的问题：byr 的 headers 是用 iso8859-1 编码的，requests 会试图用 utf-8 解码，导致很多乱码。
 可怜的 lipssmycode 并不能解决这个问题，只能把乱码都忽略，最后就出现了一堆点组成的文件名——因为只有点不会被忽略。
-- [ ] 进行广泛的测试
+- [x] 进行广泛的测试
 
 **更新：我发现上一个作者 lipssmycode 基本上就是个贼。
 主体代码都来自 [Jason2031/byrbt_bot](https://github.com/Jason2031/byrbt_bot)，
