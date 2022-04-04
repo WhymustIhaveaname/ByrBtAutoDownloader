@@ -67,7 +67,7 @@
     意思是整除 6 的小时的第 25 分钟执行。
     每次执行大约会换掉 `max_torrent_size*SIZE_RATIO(default=1%)` 的东西，所以如果一天执行四次，这样就是一个月换一遍，完美。
     更多信息见 [使用crontab重复执行脚本](https://github.com/WhymustIhaveaname/TsinghuaTunet#%E4%BD%BF%E7%94%A8crontab%E9%87%8D%E5%A4%8D%E6%89%A7%E8%A1%8C%E8%84%9A%E6%9C%AC)。
-    
+
 * 我有好几块硬盘怎么办？
 
     [Issue 4: 支持多块硬盘](https://github.com/WhymustIhaveaname/ByrBtAutoDownloader/issues/4)
